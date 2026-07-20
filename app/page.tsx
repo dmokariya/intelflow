@@ -339,6 +339,19 @@ export default function Home() {
             <button className={`refresh-feed ${refreshing ? "refreshing" : ""}`} onClick={() => loadFeed(true)} disabled={refreshing}><span>↻</span>{refreshing ? "Updating" : "Refresh"}</button>
           </section>
 
+          <aside className="swarnim-credit" aria-label="IntelFlow by Swarnim Capital">
+            <span>IntelFlow is a product of Swarnim Capital</span>
+            <a href="https://swarnimcapital.com" target="_blank" rel="noreferrer">Visit Swarnim Capital ↗</a>
+          </aside>
+
+          <section className="live-pulse" aria-label="Live briefing pulse">
+            <div><i /><span>LIVE PULSE</span></div>
+            <p><strong>{feedStories.filter((story) => story.tags.includes("India")).length}</strong> India</p>
+            <p><strong>{feedStories.filter((story) => story.tags.includes("Markets")).length}</strong> Markets</p>
+            <p><strong>{feedStories.filter((story) => story.tags.includes("Regulation")).length}</strong> Regulatory</p>
+            <p><strong>{feedStories.filter((story) => story.tags.includes("US")).length}</strong> US</p>
+          </section>
+
           <nav className="tag-strip" aria-label="News filters">
             {["For you", ...selected].map((tag) => (
               <button key={tag} className={activeTag === tag ? "active" : ""} onClick={() => setActiveTag(tag)}>
@@ -400,17 +413,6 @@ export default function Home() {
         </section>
       )}
 
-      {page === "feed" && (
-        <aside className="swarnim-credit" aria-label="IntelFlow by Swarnim Capital">
-          <div>
-            <span>BUILT BY SWARNIM CAPITAL</span>
-            <h2>Focused intelligence for informed financial conversations.</h2>
-            <p>IntelFlow is a product of Swarnim Capital.</p>
-          </div>
-          <a href="https://swarnimcapital.com" target="_blank" rel="noreferrer">Visit Swarnim Capital <span>↗</span></a>
-        </aside>
-      )}
-
       <nav className="bottom-nav pro-nav" aria-label="Primary navigation">
         <button className={page === "feed" ? "active" : ""} onClick={() => navigate("feed")}><span>⌂</span>Briefing</button>
         <button className={page === "discover" ? "active" : ""} onClick={() => navigate("discover")}><span>⌕</span>Discover</button>
@@ -457,12 +459,22 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   setProfile: (value: DistributorProfile) => void;
   initialStory: Story | null;
 }) {
-  const [tab, setTab] = useState<"desk" | "regulators" | "notes" | "profile">(initialStory ? "notes" : "desk");
+  const [tab, setTab] = useState<"desk" | "tools" | "regulators" | "notes" | "profile">(initialStory ? "notes" : "desk");
   const [noteStory, setNoteStory] = useState<Story | null>(initialStory);
   const [noteTone, setNoteTone] = useState<"client" | "whatsapp">("client");
   const [copied, setCopied] = useState(false);
+  const [copiedTool, setCopiedTool] = useState("");
   const [draft, setDraft] = useState("");
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const [completedActions, setCompletedActions] = useState<string[]>(() => storage.get(`intelflow:pro-actions:${todayKey}`, []));
   const morningFive = stories.filter((story) => story.tags.some((tag) => ["Markets", "Business", "India"].includes(tag))).slice(0, 5);
+  const practiceStories = stories.filter((story) => story.tags.some((tag) => ["Markets", "Regulation", "Personal Finance", "US", "Economy"].includes(tag))).slice(0, 6);
+  const dailyActions = ["Read the Morning 5", "Check official regulator updates", "Prepare one neutral client note", "Review pending follow-ups"];
+  const quickMessages = [
+    { title: "Market check-in", text: "Hello. Markets are moving today, but one session alone does not require an immediate portfolio change. Let me know if your goals, time horizon or liquidity needs have changed." },
+    { title: "Review reminder", text: "Hello. A periodic review helps us reconnect your investments with your goals and time horizon. Please share a convenient time; no action is implied by this message." },
+    { title: "Headline response", text: "This headline is useful context, not a buy or sell signal. I am reviewing the original source and the wider picture before drawing any conclusion." },
+  ];
   const regulatorAlerts = [
     { authority: "SEBI", title: "Review new circulars before client communication", time: "Watchlist · Today", level: "Action" },
     { authority: "AMFI", title: "Distributor guidance and operational updates", time: "Watchlist · Daily", level: "Monitor" },
@@ -498,22 +510,36 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
     window.setTimeout(() => setCopied(false), 1600);
   }
 
+  function toggleAction(action: string) {
+    setCompletedActions((current) => {
+      const next = current.includes(action) ? current.filter((item) => item !== action) : [...current, action];
+      storage.set(`intelflow:pro-actions:${todayKey}`, next);
+      return next;
+    });
+  }
+
+  async function copyTool(title: string, text: string) {
+    await navigator.clipboard?.writeText(text);
+    setCopiedTool(title);
+    window.setTimeout(() => setCopiedTool(""), 1600);
+  }
+
   if (!isPro) {
     return (
       <section className="pro-landing">
         <div className="pro-hero">
           <span className="pro-kicker">INTELFLOW DISTRIBUTOR PRO</span>
           <h1>Your morning intelligence desk.</h1>
-          <p>Turn the day’s market and regulatory signals into clear, client-ready communication—without losing your compliance guardrails.</p>
+          <p>Save time every working day with a focused briefing, action checklist, official-source watch, practical conversation cues and ready-to-edit client messages.</p>
           <div className="pro-price"><strong>₹399</strong><span>/ month<br />or ₹3,999 yearly</span></div>
           <button onClick={activateDemo}>Preview Pro on this device <span>→</span></button>
-          <small>Local product preview only. No account is created and no payment is taken.</small>
+          <small>About ₹13 a day. Local product preview only—no account, payment or subscription.</small>
         </div>
         <div className="pro-feature-grid">
-          <article><span>01</span><strong>Morning 5</strong><p>Five concise signals selected for an Indian distributor’s working day.</p></article>
-          <article><span>02</span><strong>Regulator watch</strong><p>A focused place for SEBI, AMFI and RBI updates that need attention.</p></article>
-          <article><span>03</span><strong>Client notes</strong><p>Turn attributed briefs into editable messages with a standard disclaimer.</p></article>
-          <article><span>04</span><strong>Distributor identity</strong><p>Keep your ARN, EUIN and client-facing details ready on this device.</p></article>
+          <article><span>01</span><strong>Action desk</strong><p>Morning 5 plus a daily checklist that keeps the working day moving.</p></article>
+          <article><span>02</span><strong>Practice feed</strong><p>Live stories converted into concise client-conversation angles.</p></article>
+          <article><span>03</span><strong>Message kit</strong><p>Short, neutral templates for common client follow-ups and headlines.</p></article>
+          <article><span>04</span><strong>Official watch</strong><p>Regulator links and verified source channels in one focused place.</p></article>
         </div>
       </section>
     );
@@ -525,8 +551,10 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
         <div><span className="pro-kicker">DISTRIBUTOR MODE · LOCAL PREVIEW</span><h1>Good morning{profile.name ? `, ${profile.name.split(" ")[0]}` : ""}.</h1><p>Your market, business and regulatory desk in one calm view.</p></div>
         <span className="pro-status">PRO PREVIEW</span>
       </header>
+      <div className="pro-value-strip"><span>YOUR DAILY VALUE</span><strong>5 signals</strong><i /> <strong>4 actions</strong><i /> <strong>3 ready messages</strong></div>
       <nav className="pro-tabs" aria-label="Distributor Pro sections">
         <button className={tab === "desk" ? "active" : ""} onClick={() => setTab("desk")}>Today’s desk</button>
+        <button className={tab === "tools" ? "active" : ""} onClick={() => setTab("tools")}>Daily tools</button>
         <button className={tab === "regulators" ? "active" : ""} onClick={() => setTab("regulators")}>Regulator watch</button>
         <button className={tab === "notes" ? "active" : ""} onClick={() => setTab("notes")}>Client notes</button>
         <button className={tab === "profile" ? "active" : ""} onClick={() => setTab("profile")}>Profile</button>
@@ -544,6 +572,31 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
           <p className="watch-disclaimer">A monitoring workspace—not a substitute for checking the regulator’s official website or professional compliance advice.</p>
           {regulatorAlerts.map((alert) => <article key={alert.authority}><span>{alert.authority}</span><strong>{alert.title}</strong><small>{alert.time}</small><i>{alert.level}</i></article>)}
           <OfficialRegulatorLinks />
+        </aside>
+      </div>}
+
+      {tab === "tools" && <div className="pro-tools-grid">
+        <section className="daily-checklist">
+          <div className="pro-section-title"><div><span>TODAY’S ROUTINE</span><h2>Action checklist</h2></div><i>{completedActions.length}/{dailyActions.length}</i></div>
+          {dailyActions.map((action) => <button key={action} className={completedActions.includes(action) ? "done" : ""} onClick={() => toggleAction(action)}><span>{completedActions.includes(action) ? "✓" : ""}</span><strong>{action}</strong></button>)}
+          <p>Only checklist completion is stored locally. Do not enter client information.</p>
+        </section>
+        <section className="quick-message-kit">
+          <div className="pro-section-title"><div><span>ONE-TAP STARTERS</span><h2>Quick message kit</h2></div></div>
+          {quickMessages.map((message) => <article key={message.title}><strong>{message.title}</strong><p>{message.text}</p><button onClick={() => void copyTool(message.title, message.text)}>{copiedTool === message.title ? "Copied ✓" : "Copy message"}</button></article>)}
+          <small>Edit and review every message before sending. These templates are neutral starting points, not investment advice.</small>
+        </section>
+        <section className="practice-feed">
+          <div className="pro-section-title"><div><span>LIVE RSS · PRACTICE EDGE</span><h2>Conversation cues</h2></div><i className="live-dot">LIVE</i></div>
+          {(practiceStories.length ? practiceStories : stories.slice(0, 6)).map((story) => <article key={story.id}><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><p><strong>Try this:</strong> {conversationCue(story)}</p><div><a href={story.sourceUrl} target="_blank" rel="noreferrer">Open source ↗</a><button onClick={() => { setNoteStory(story); setTab("notes"); }}>Make note →</button></div></article>)}
+        </section>
+        <aside className="x-source-watch">
+          <span className="pro-kicker">OFFICIAL X WATCH</span><h2>Useful source channels.</h2><p>Fast awareness only. Verify regulatory information on the authority’s official website before using it.</p>
+          <a href="https://x.com/SEBI_updates" target="_blank" rel="noreferrer"><strong>@SEBI_updates</strong><span>Regulations and circulars ↗</span></a>
+          <a href="https://x.com/sebi_india" target="_blank" rel="noreferrer"><strong>@sebi_india</strong><span>Investor education ↗</span></a>
+          <a href="https://x.com/RBI" target="_blank" rel="noreferrer"><strong>@RBI</strong><span>Reserve Bank updates ↗</span></a>
+          <a href="https://x.com/RBIsays" target="_blank" rel="noreferrer"><strong>@RBIsays</strong><span>Public awareness ↗</span></a>
+          <a href="https://x.com/MFSahiHai" target="_blank" rel="noreferrer"><strong>@MFSahiHai</strong><span>Mutual fund education ↗</span></a>
         </aside>
       </div>}
 
@@ -580,6 +633,14 @@ function buildClientNote(story: Story, profile: DistributorProfile, tone: "clien
   const firstSentence = story.summary.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || story.summary;
   const shortContext = firstSentence.length > 180 ? `${firstSentence.slice(0, 177).trimEnd()}…` : firstSentence;
   return `${greeting}${story.title}\n\nIn short: ${shortContext}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nNo buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nDisclaimer: ${profile.disclaimer}`;
+}
+
+function conversationCue(story: Story) {
+  if (story.tags.includes("Regulation")) return "Check the official circular, effective date and who is affected before discussing it.";
+  if (story.tags.includes("US")) return "Explain the possible India link through rates, currency or sentiment—without assuming a direct portfolio impact.";
+  if (story.tags.includes("Personal Finance")) return "Connect the topic to goals, time horizon and liquidity needs instead of presenting a product answer.";
+  if (story.tags.includes("Economy")) return "Separate the economic signal from the client decision; explain what changed and what has not.";
+  return "Use this as context for a calm check-in, not as a reason to recommend an immediate change.";
 }
 
 function OfficialRegulatorLinks() {
