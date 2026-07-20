@@ -21,13 +21,13 @@ export const metadata: Metadata = {
     title: "IntelFlow — India’s Intelligent Daily Briefing",
     description: "Know what matters. India, markets, business and regulation in one focused briefing.",
     url: "/",
-    images: [{ url: "/og-intelflow.jpg", width: 1200, height: 630, alt: "IntelFlow — Know what matters" }],
+    images: [{ url: "https://raw.githubusercontent.com/dmokariya/intelflow/main/public/og-intelflow.jpg", width: 1200, height: 630, alt: "IntelFlow — Know what matters" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "IntelFlow — India’s Intelligent Daily Briefing",
     description: "Know what matters. India, markets, business and regulation in one focused briefing.",
-    images: ["/og-intelflow.jpg"],
+    images: ["https://raw.githubusercontent.com/dmokariya/intelflow/main/public/og-intelflow.jpg"],
   },
   icons: { icon: [{ url: "/favicon.svg", type: "image/svg+xml" }], shortcut: "/favicon.svg", apple: "/favicon.svg" },
 };
