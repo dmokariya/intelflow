@@ -400,6 +400,17 @@ export default function Home() {
         </section>
       )}
 
+      {page === "feed" && (
+        <aside className="swarnim-credit" aria-label="IntelFlow by Swarnim Capital">
+          <div>
+            <span>BUILT BY SWARNIM CAPITAL</span>
+            <h2>Focused intelligence for informed financial conversations.</h2>
+            <p>IntelFlow is a product of Swarnim Capital.</p>
+          </div>
+          <a href="https://swarnimcapital.com" target="_blank" rel="noreferrer">Visit Swarnim Capital <span>↗</span></a>
+        </aside>
+      )}
+
       <nav className="bottom-nav pro-nav" aria-label="Primary navigation">
         <button className={page === "feed" ? "active" : ""} onClick={() => navigate("feed")}><span>⌂</span>Briefing</button>
         <button className={page === "discover" ? "active" : ""} onClick={() => navigate("discover")}><span>⌕</span>Discover</button>
