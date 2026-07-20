@@ -1,0 +1,11 @@
+# AI and automated-agent notice for IntelFlow
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /reader
+
+Attribution: Required
+Preferred-Canonical: https://intelflow.in/
+Contact: hello@swarnimcapital.com
+
+IntelFlow permits discovery and factual indexing of public pages. Third-party headlines, excerpts and linked reporting remain the property of their respective publishers and must not be treated as IntelFlow-owned training material.

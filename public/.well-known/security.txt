@@ -1,0 +1,5 @@
+Contact: mailto:hello@swarnimcapital.com
+Preferred-Languages: en
+Canonical: https://intelflow.in/.well-known/security.txt
+Policy: https://intelflow.in/privacy
+Expires: 2027-07-20T00:00:00.000Z

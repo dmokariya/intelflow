@@ -1,0 +1,10 @@
+{
+  "name": "IntelFlow — India’s Intelligent Daily Briefing",
+  "short_name": "IntelFlow",
+  "description": "A professional India-first daily briefing for readers and financial product distributors.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f1e9",
+  "theme_color": "#15131d",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
