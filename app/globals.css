@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-:root { --ink:#15171b; --muted:#72747a; --paper:#f5f4ee; --card:#fff; --violet:#6747e8; --line:#deddd6; }
+:root { --ink:#15171b; --muted:#72747a; --paper:#f5f4ee; --card:#fff; --violet:#6747e8; --line:#deddd6; --font-space:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; --font-editorial:"Iowan Old Style",Baskerville,"Times New Roman",serif; }
 * { box-sizing:border-box; }
 html { background:#e9e8e2; }
 body { margin:0; color:var(--ink); background:var(--paper); font-family:var(--font-space),sans-serif; -webkit-font-smoothing:antialiased; }
