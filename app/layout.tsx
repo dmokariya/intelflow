@@ -23,5 +23,9 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const structuredData = { "@context": "https://schema.org", "@type": "NewsMediaOrganization", name: "IntelFlow", url: "https://intelflow.in", logo: "https://intelflow.in/favicon.svg", parentOrganization: { "@type": "Organization", name: "Swarnim Capital" }, contactPoint: { "@type": "ContactPoint", email: "hello@swarnimcapital.com", contactType: "customer support", areaServed: "IN" } };
-  return <html lang="en-IN"><body><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />{children}</body></html>;
+  const googleTag = `window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-9JP9G1RWRY');`;
+  return <html lang="en-IN"><head><script async src="https://www.googletagmanager.com/gtag/js?id=G-9JP9G1RWRY" /><script dangerouslySetInnerHTML={{ __html: googleTag }} /></head><body><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />{children}</body></html>;
 }
