@@ -577,7 +577,9 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
 function buildClientNote(story: Story, profile: DistributorProfile, tone: "client" | "whatsapp") {
   const greeting = tone === "whatsapp" ? "Good morning 👋\n\n" : "Client update\n\n";
   const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
-  return `${greeting}${story.title}\n\n${story.summary}\n\nContext: This is a neutral information update, not a buy or sell recommendation. One headline alone does not require an immediate portfolio change. Please consider your goals, time horizon and the wider context, and review the original report before making any decision.\n\nSource: ${story.source}\n${story.sourceUrl}${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nCompliance disclaimer: ${profile.disclaimer}`;
+  const firstSentence = story.summary.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || story.summary;
+  const shortContext = firstSentence.length > 180 ? `${firstSentence.slice(0, 177).trimEnd()}…` : firstSentence;
+  return `${greeting}${story.title}\n\nIn short: ${shortContext}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nNo buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nDisclaimer: ${profile.disclaimer}`;
 }
 
 function OfficialRegulatorLinks() {
