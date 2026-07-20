@@ -1,0 +1,13 @@
+# IntelFlow
+
+> IntelFlow is an India-first news briefing product operated by Swarnim Capital.
+
+## Primary pages
+- Home: https://intelflow.in/
+- Daily briefings: https://intelflow.in/daily
+- RSS feed: https://intelflow.in/feed.xml
+- Disclosure: https://intelflow.in/disclosure
+- Privacy: https://intelflow.in/privacy
+- Terms: https://intelflow.in/terms
+
+IntelFlow organises links and short automated, extractive briefs from attributed third-party publishers. It is not original reporting, investment advice, legal advice or medical advice. Important claims should be verified with the linked publisher.

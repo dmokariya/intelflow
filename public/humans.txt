@@ -1,0 +1,7 @@
+IntelFlow
+Product of Swarnim Capital
+Built for India
+Support: hello@swarnimcapital.com
+
+Technology: Next.js-compatible React, Vinext, Vite and Cloudflare Workers.
+Principles: attribution, calm design, source transparency and minimal data collection.
