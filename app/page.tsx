@@ -5,13 +5,14 @@ import type { CSSProperties } from "react";
 
 declare global {
   interface Window {
-    gtag?: (...args: unknown[]) => void;
+    dataLayer?: Array<Record<string, unknown>>;
   }
 }
 
 function trackEvent(name: string, parameters: Record<string, string | number | boolean> = {}) {
   if (typeof window === "undefined") return;
-  window.gtag?.("event", name, { ...parameters, transport_type: "beacon" });
+  window.dataLayer = window.dataLayer || [];
+  window.dataLayer.push({ event: name, ...parameters });
 }
 
 type Story = {
