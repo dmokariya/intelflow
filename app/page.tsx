@@ -3,6 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
+declare global {
+  interface Window {
+    gtag?: (...args: unknown[]) => void;
+  }
+}
+
+function trackEvent(name: string, parameters: Record<string, string | number | boolean> = {}) {
+  if (typeof window === "undefined") return;
+  window.gtag?.("event", name, { ...parameters, transport_type: "beacon" });
+}
+
 type Story = {
   id: number;
   title: string;
@@ -241,12 +252,14 @@ export default function Home() {
     if (selected.length < 3) return;
     storage.set("intelflow:onboarded", true);
     storage.set("intelflow:interests", selected);
+    trackEvent("onboarding_completed", { interest_count: selected.length });
     setOnboarded(true);
   }
 
   function toggleBookmark(id: number) {
     setBookmarks((current) => {
       const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      if (!current.includes(id)) trackEvent("story_bookmarked", { item_id: String(id) });
       storage.set("intelflow:bookmarks", next);
       return next;
     });
@@ -260,10 +273,12 @@ export default function Home() {
   function switchMode(next: "reader" | "distributor") {
     setMode(next);
     storage.set("intelflow:mode", next);
+    if (next === "distributor") trackEvent("distributor_mode_opened");
     navigate(next === "reader" ? "feed" : "pro");
   }
 
   async function shareStory(story: Story) {
+    trackEvent("share", { method: navigator.share ? "native" : "clipboard", content_type: "story", item_id: String(story.id) });
     if (navigator.share) {
       await navigator.share({ title: story.title, text: story.summary, url: story.sourceUrl });
       return;
@@ -400,8 +415,8 @@ export default function Home() {
                       <span>{story.coverage > 1 ? `Connected from ${story.coverage} reports` : "Briefed from the original report"}</span>
                     </div>
                     <div className="story-actions">
-                      <a href={story.sourceUrl} target="_blank" rel="noreferrer">Read full story <span>↗</span></a>
-                      {story.tags.some((tag) => ["Markets", "Business", "India"].includes(tag)) && <button className="explain-button" onClick={() => { setExplainStory(story); switchMode("distributor"); }}>Explain to client</button>}
+                      <a href={story.sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackEvent("source_opened", { item_id: String(story.id), source: story.source })}>Read full story <span>↗</span></a>
+                      {story.tags.some((tag) => ["Markets", "Business", "India"].includes(tag)) && <button className="explain-button" onClick={() => { trackEvent("client_note_created", { item_id: String(story.id), entry_point: "feed" }); setExplainStory(story); switchMode("distributor"); }}>Explain to client</button>}
                       <button className="share-button" onClick={() => void shareStory(story)} aria-label={`Share ${story.title}`}><span>Share</span><i>⤴</i></button>
                     </div>
                   </div>
@@ -492,6 +507,7 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
 
   function activateDemo() {
     storage.set("intelflow:pro-demo", true);
+    trackEvent("pro_demo_activated", { plan_viewed: "local_preview" });
     setIsPro(true);
   }
 
@@ -506,8 +522,15 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
 
   async function copyNote() {
     await navigator.clipboard?.writeText(draft);
+    if (noteStory) trackEvent("client_note_copied", { item_id: String(noteStory.id), tone: noteTone });
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  function openClientNote(story: Story, entryPoint: string) {
+    trackEvent("client_note_created", { item_id: String(story.id), entry_point: entryPoint });
+    setNoteStory(story);
+    setTab("notes");
   }
 
   function toggleAction(action: string) {
@@ -520,6 +543,7 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
 
   async function copyTool(title: string, text: string) {
     await navigator.clipboard?.writeText(text);
+    trackEvent("client_template_copied", { template_name: title });
     setCopiedTool(title);
     window.setTimeout(() => setCopiedTool(""), 1600);
   }
@@ -564,7 +588,7 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
         <section className="morning-five">
           <div className="pro-section-title"><div><span>6-MINUTE READ</span><h2>Morning 5</h2></div><i>{morningFive.length || 5}</i></div>
           {(morningFive.length ? morningFive : stories.slice(0, 5)).map((story, index) => <article key={story.id}>
-            <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p><button onClick={() => { setNoteStory(story); setTab("notes"); }}>Create client note →</button></div>
+            <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p><button onClick={() => openClientNote(story, "morning_five")}>Create client note →</button></div>
           </article>)}
         </section>
         <aside className="regulator-watch">
@@ -588,15 +612,15 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
         </section>
         <section className="practice-feed">
           <div className="pro-section-title"><div><span>LIVE RSS · PRACTICE EDGE</span><h2>Conversation cues</h2></div><i className="live-dot">LIVE</i></div>
-          {(practiceStories.length ? practiceStories : stories.slice(0, 6)).map((story) => <article key={story.id}><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><p><strong>Try this:</strong> {conversationCue(story)}</p><div><a href={story.sourceUrl} target="_blank" rel="noreferrer">Open source ↗</a><button onClick={() => { setNoteStory(story); setTab("notes"); }}>Make note →</button></div></article>)}
+          {(practiceStories.length ? practiceStories : stories.slice(0, 6)).map((story) => <article key={story.id}><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><p><strong>Try this:</strong> {conversationCue(story)}</p><div><a href={story.sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackEvent("source_opened", { item_id: String(story.id), source: story.source, entry_point: "practice_feed" })}>Open source ↗</a><button onClick={() => openClientNote(story, "practice_feed")}>Make note →</button></div></article>)}
         </section>
         <aside className="x-source-watch">
           <span className="pro-kicker">OFFICIAL X WATCH</span><h2>Useful source channels.</h2><p>Fast awareness only. Verify regulatory information on the authority’s official website before using it.</p>
-          <a href="https://x.com/SEBI_updates" target="_blank" rel="noreferrer"><strong>@SEBI_updates</strong><span>Regulations and circulars ↗</span></a>
-          <a href="https://x.com/sebi_india" target="_blank" rel="noreferrer"><strong>@sebi_india</strong><span>Investor education ↗</span></a>
-          <a href="https://x.com/RBI" target="_blank" rel="noreferrer"><strong>@RBI</strong><span>Reserve Bank updates ↗</span></a>
-          <a href="https://x.com/RBIsays" target="_blank" rel="noreferrer"><strong>@RBIsays</strong><span>Public awareness ↗</span></a>
-          <a href="https://x.com/MFSahiHai" target="_blank" rel="noreferrer"><strong>@MFSahiHai</strong><span>Mutual fund education ↗</span></a>
+          <a href="https://x.com/SEBI_updates" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "SEBI_updates" })}><strong>@SEBI_updates</strong><span>Regulations and circulars ↗</span></a>
+          <a href="https://x.com/sebi_india" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "sebi_india" })}><strong>@sebi_india</strong><span>Investor education ↗</span></a>
+          <a href="https://x.com/RBI" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "RBI" })}><strong>@RBI</strong><span>Reserve Bank updates ↗</span></a>
+          <a href="https://x.com/RBIsays" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "RBIsays" })}><strong>@RBIsays</strong><span>Public awareness ↗</span></a>
+          <a href="https://x.com/MFSahiHai" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "MFSahiHai" })}><strong>@MFSahiHai</strong><span>Mutual fund education ↗</span></a>
         </aside>
       </div>}
 
@@ -608,7 +632,7 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
       </section>}
 
       {tab === "notes" && <div className="note-builder">
-        <div className="note-source-list"><span className="pro-kicker">CHOOSE A SIGNAL</span><h2>Start with today’s briefing.</h2>{stories.slice(0, 8).map((story) => <button className={noteStory?.id === story.id ? "active" : ""} key={story.id} onClick={() => setNoteStory(story)}><small>{story.tags[0]}</small><strong>{story.title}</strong></button>)}</div>
+        <div className="note-source-list"><span className="pro-kicker">CHOOSE A SIGNAL</span><h2>Start with today’s briefing.</h2>{stories.slice(0, 8).map((story) => <button className={noteStory?.id === story.id ? "active" : ""} key={story.id} onClick={() => openClientNote(story, "client_notes_tab")}><small>{story.tags[0]}</small><strong>{story.title}</strong></button>)}</div>
         <div className="note-preview">
           <div className="note-toolbar"><div><button className={noteTone === "client" ? "active" : ""} onClick={() => setNoteTone("client")}>Client update</button><button className={noteTone === "whatsapp" ? "active" : ""} onClick={() => setNoteTone("whatsapp")}>WhatsApp</button></div>{noteStory && <button className="copy-note" onClick={() => void copyNote()}>{copied ? "Copied ✓" : "Copy note"}</button>}</div>
           {noteStory ? <><textarea className="editable-note" aria-label="Editable client message" value={draft} onChange={(event) => setDraft(event.target.value)} /><p className="compliance-note"><strong>Before sending:</strong> review accuracy, suitability, source context and your organisation’s compliance policy. IntelFlow does not approve communications or provide investment advice.</p></> : <div className="note-empty"><span>✦</span><h3>Select a story</h3><p>We’ll structure an editable, attributed client update for your review.</p></div>}
@@ -644,7 +668,14 @@ function conversationCue(story: Story) {
 }
 
 function OfficialRegulatorLinks() {
-  return <div className="official-links"><a href="https://www.sebi.gov.in/legal/circulars.html" target="_blank" rel="noreferrer">SEBI circulars ↗</a><a href="https://www.amfiindia.com/" target="_blank" rel="noreferrer">AMFI ↗</a><a href="https://www.rbi.org.in/" target="_blank" rel="noreferrer">RBI ↗</a><a href="https://irdai.gov.in/circulars" target="_blank" rel="noreferrer">IRDAI ↗</a><a href="https://www.pfrda.org.in/" target="_blank" rel="noreferrer">PFRDA ↗</a></div>;
+  const regulators = [
+    ["SEBI circulars", "https://www.sebi.gov.in/legal/circulars.html"],
+    ["AMFI", "https://www.amfiindia.com/"],
+    ["RBI", "https://www.rbi.org.in/"],
+    ["IRDAI", "https://irdai.gov.in/circulars"],
+    ["PFRDA", "https://www.pfrda.org.in/"],
+  ];
+  return <div className="official-links">{regulators.map(([name, url]) => <a key={name} href={url} target="_blank" rel="noreferrer" onClick={() => trackEvent("regulator_link_opened", { regulator: name })}>{name} ↗</a>)}</div>;
 }
 
 function Settings({ selected, isPro, reset }: { selected: string[]; isPro: boolean; reset: () => void }) {
