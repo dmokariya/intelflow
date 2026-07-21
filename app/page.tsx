@@ -46,6 +46,22 @@ type DistributorProfile = {
   logo: string;
 };
 
+type TrialState = { startedAt: number; actions: number };
+const trialDays = 7;
+const trialActions = 10;
+const trialStorageKey = "intelflow:pro-trial";
+
+function getTrialStatus(trial: TrialState | null) {
+  if (!trial) return { locked: false, day: 0, daysRemaining: trialDays, actionsRemaining: trialActions };
+  const elapsedDays = Math.max(0, Math.floor((Date.now() - trial.startedAt) / 86_400_000));
+  return {
+    locked: elapsedDays >= trialDays && trial.actions >= trialActions,
+    day: Math.min(trialDays, elapsedDays + 1),
+    daysRemaining: Math.max(0, trialDays - elapsedDays),
+    actionsRemaining: Math.max(0, trialActions - trial.actions),
+  };
+}
+
 const defaultDistributorProfile: DistributorProfile = {
   name: "",
   arn: "",
@@ -217,9 +233,8 @@ export default function Home() {
   const [studioTool, setStudioTool] = useState<StudioTool>("note");
   const [menuOpen, setMenuOpen] = useState(false);
   const [feedStories, setFeedStories] = useState<Story[]>(demoStories);
-  const [isPro, setIsPro] = useState(false);
+  const [trial, setTrial] = useState<TrialState | null>(null);
   const [profile, setProfile] = useState<DistributorProfile>(defaultDistributorProfile);
-  const [mode, setMode] = useState<"reader" | "distributor">("reader");
   const [explainStory, setExplainStory] = useState<Story | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -231,7 +246,13 @@ export default function Home() {
     setOnboarded(storage.get("intelflow:onboarded", false));
     setSelected(storage.get("intelflow:interests", ["AI", "India", "Technology", "Markets"]));
     setBookmarks(storage.get("intelflow:bookmarks", []));
-    setIsPro(storage.get("intelflow:pro-demo", false));
+    const savedTrial = storage.get<TrialState | null>(trialStorageKey, null);
+    if (savedTrial) setTrial(savedTrial);
+    else if (storage.get("intelflow:pro-demo", false)) {
+      const migratedTrial = { startedAt: Date.now(), actions: 0 };
+      storage.set(trialStorageKey, migratedTrial);
+      setTrial(migratedTrial);
+    }
     setProfile({ ...defaultDistributorProfile, ...storage.get("intelflow:distributor-profile", defaultDistributorProfile) });
     const applyUrlState = () => {
       const parameters = new URLSearchParams(window.location.search);
@@ -247,7 +268,6 @@ export default function Home() {
       setActiveTag(parameters.get("topic") || "For you");
       const requestedLimit = Number(parameters.get("limit") || 20);
       setVisibleCount(Number.isFinite(requestedLimit) ? Math.max(20, Math.min(80, requestedLimit)) : 20);
-      setMode(nextPage === "pro" ? "distributor" : "reader");
       if (legacyStudioTab) {
         const canonicalUrl = new URL(window.location.href);
         canonicalUrl.searchParams.set("tab", "studio");
@@ -345,9 +365,6 @@ export default function Home() {
     setPage(next);
     setVisibleCount(20);
     setMenuOpen(false);
-    const nextMode = next === "pro" ? "distributor" : "reader";
-    setMode(nextMode);
-    storage.set("intelflow:mode", nextMode);
     writeAppUrl(next);
   }
 
@@ -355,9 +372,7 @@ export default function Home() {
     setProTab(nextTab);
     setStudioTool(tool);
     setPage("pro");
-    setMode("distributor");
     setMenuOpen(false);
-    storage.set("intelflow:mode", "distributor");
     setExplainStory(story);
     writeAppUrl("pro", { tab: nextTab, story, tool });
   }
@@ -379,14 +394,6 @@ export default function Home() {
     trackEvent("feed_more_loaded", { visible_count: nextCount, topic: activeTag });
   }
 
-  function switchMode(next: "reader" | "distributor") {
-    setMode(next);
-    storage.set("intelflow:mode", next);
-    if (next === "distributor") trackEvent("distributor_mode_opened");
-    if (next === "reader") navigate("feed");
-    else navigatePro(proTab);
-  }
-
   async function shareStory(story: Story) {
     trackEvent("share", { method: navigator.share ? "native" : "clipboard", content_type: "story", item_id: String(story.id) });
     if (navigator.share) {
@@ -403,9 +410,9 @@ export default function Home() {
       <main className="onboarding-shell">
         <header className="onboarding-brand"><Brand /></header>
         <section className="onboarding-copy">
-          <span className="eyebrow">YOUR DAILY SIGNAL</span>
-          <h1>What do you want<br />to know more about?</h1>
-          <p>Pick at least three interests. We’ll shape a calmer, sharper briefing around you.</p>
+          <span className="eyebrow">DISTRIBUTOR INTELLIGENCE</span>
+          <h1>What should your<br />daily desk watch?</h1>
+          <p>Pick at least three interests. We’ll tune your distributor briefing around them.</p>
         </section>
         <section className="interest-grid" aria-label="Choose your interests">
           {interests.map(([tag, label, icon]) => {
@@ -436,18 +443,15 @@ export default function Home() {
     <main className="app-shell">
       <header className="topbar">
         <Brand />
-        <div className="mode-switch" role="group" aria-label="IntelFlow mode">
-          <button className={mode === "reader" ? "active" : ""} onClick={() => switchMode("reader")}>Reader</button>
-          <button className={mode === "distributor" ? "active" : ""} onClick={() => switchMode("distributor")}>Distributor</button>
-        </div>
+        <span className="distributor-badge">BUILT FOR DISTRIBUTORS</span>
         <div className="top-actions">
           <button className="icon-button" aria-label="Search" onClick={() => navigate("discover")}>⌕</button>
           <button className="avatar-button" aria-label="Open menu" onClick={() => setMenuOpen((value) => !value)}>G</button>
         </div>
         {menuOpen && (
           <div className="profile-menu">
-            <strong>Guest reader</strong>
-            <span>Your interests stay on this device.</span>
+            <strong>Guest distributor</strong>
+            <span>Your interests and trial progress stay on this device.</span>
             <button onClick={() => navigate("settings")}>Settings</button>
           </div>
         )}
@@ -458,7 +462,7 @@ export default function Home() {
           <section className="welcome-row">
             <div>
               <span className="date-label">LIVE · INDIA + UNITED STATES</span>
-              <h1>Good afternoon.</h1>
+              <h1>Your daily desk.</h1>
               <p>{visibleStories.length} signals selected for your interests{lastUpdated ? ` · Updated ${lastUpdated}` : ""}{sourceCount ? ` · ${activeSources}/${sourceCount} sources live` : ""}.</p>
             </div>
             <button className={`refresh-feed ${refreshing ? "refreshing" : ""}`} onClick={() => loadFeed(true)} disabled={refreshing}><span>↻</span>{refreshing ? "Updating" : "Refresh"}</button>
@@ -488,8 +492,8 @@ export default function Home() {
       )}
 
       {page === "discover" && <Discover selected={selected} setSelected={setSelected} />}
-      {page === "pro" && <DistributorPro stories={feedStories} isPro={isPro} setIsPro={setIsPro} profile={profile} setProfile={setProfile} initialStory={explainStory} tab={proTab} tool={studioTool} navigateTab={navigatePro} />}
-      {page === "settings" && <Settings selected={selected} isPro={isPro} reset={() => { storage.set("intelflow:onboarded", false); setOnboarded(false); }} />}
+      {page === "pro" && <DistributorPro stories={feedStories} trial={trial} setTrial={setTrial} profile={profile} setProfile={setProfile} initialStory={explainStory} tab={proTab} tool={studioTool} navigateTab={navigatePro} />}
+      {page === "settings" && <Settings selected={selected} trial={trial} reset={() => { storage.set("intelflow:onboarded", false); setOnboarded(false); }} />}
 
       {(page === "feed" || page === "saved") && (
         <section className="story-stage">
@@ -545,7 +549,7 @@ export default function Home() {
         <button className={page === "feed" ? "active" : ""} onClick={() => navigate("feed")}><span>⌂</span>Briefing</button>
         <button className={page === "discover" ? "active" : ""} onClick={() => navigate("discover")}><span>⌕</span>Discover</button>
         <button className={page === "saved" ? "active" : ""} onClick={() => navigate("saved")}><span>☆</span>Saved</button>
-        <button className={page === "pro" ? "active" : ""} onClick={() => navigate("pro")}><span>◆</span>Pro</button>
+        <button className={page === "pro" ? "active" : ""} onClick={() => navigate("pro")}><span>◆</span>Distributor</button>
         <button className={page === "settings" ? "active" : ""} onClick={() => navigate("settings")}><span>☷</span>Settings</button>
       </nav>
     </main>
@@ -602,10 +606,10 @@ function selectMorningFive(stories: Story[]) {
   return selected.slice(0, 5);
 }
 
-function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initialStory, tab, tool, navigateTab }: {
+function DistributorPro({ stories, trial, setTrial, profile, setProfile, initialStory, tab, tool, navigateTab }: {
   stories: Story[];
-  isPro: boolean;
-  setIsPro: (value: boolean) => void;
+  trial: TrialState | null;
+  setTrial: (value: TrialState | null | ((current: TrialState | null) => TrialState | null)) => void;
   profile: DistributorProfile;
   setProfile: (value: DistributorProfile) => void;
   initialStory: Story | null;
@@ -623,6 +627,8 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   const practiceStories = stories.filter((story) => story.tags.some((tag) => ["Markets", "Regulation", "Personal Finance", "US", "Economy"].includes(tag))).slice(0, 6);
   const activeStudioStory = studioStory || stories[0] || demoStories[0];
   const studioStoryOptions = [activeStudioStory, ...stories.filter((story) => story.id !== activeStudioStory.id)].slice(0, 40);
+  const trialStatus = getTrialStatus(trial);
+  const trialProgress = trialStatus.locked ? "Trial complete" : [trialStatus.daysRemaining ? `${trialStatus.daysRemaining} day${trialStatus.daysRemaining === 1 ? "" : "s"} left` : "Time requirement complete", trialStatus.actionsRemaining ? `${trialStatus.actionsRemaining} output${trialStatus.actionsRemaining === 1 ? "" : "s"} left` : "Output allowance used"].join(" · ");
   const dailyActions = ["Read the Morning 5", "Check official regulator updates", "Prepare one neutral client note", "Review pending follow-ups"];
   const quickMessages = [
     { title: "Market check-in", text: "Hello. Markets are moving today, but one session alone does not require an immediate portfolio change. Let me know if your goals, time horizon or liquidity needs have changed." },
@@ -641,10 +647,28 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
     if (initialStory) setStudioStory(initialStory);
   }, [initialStory]);
 
-  function activateDemo() {
+  function startTrial() {
+    const nextTrial = trial || { startedAt: Date.now(), actions: 0 };
+    storage.set(trialStorageKey, nextTrial);
     storage.set("intelflow:pro-demo", true);
-    trackEvent("pro_demo_activated", { plan_viewed: "local_preview" });
-    setIsPro(true);
+    trackEvent("pro_trial_started", { trial_days: trialDays, included_actions: trialActions });
+    setTrial(nextTrial);
+  }
+
+  function allowOutput() {
+    if (!trialStatus.locked) return true;
+    trackEvent("pro_trial_limit_reached", { actions_used: trial?.actions || 0, trial_day: trialStatus.day });
+    return false;
+  }
+
+  function recordTrialAction(action: string) {
+    setTrial((current) => {
+      if (!current) return current;
+      const next = { ...current, actions: current.actions + 1 };
+      storage.set(trialStorageKey, next);
+      return next;
+    });
+    trackEvent("pro_trial_action", { action, action_number: (trial?.actions || 0) + 1 });
   }
 
   function saveProfile(next: DistributorProfile) {
@@ -657,8 +681,10 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   }, [activeStudioStory, profile]);
 
   async function copyNote() {
+    if (!allowOutput()) return;
     await navigator.clipboard?.writeText(draft);
     trackEvent("client_note_copied", { item_id: String(activeStudioStory.id), format: "written" });
+    recordTrialAction("client_note_copied");
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   }
@@ -684,13 +710,15 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   }
 
   async function copyTool(title: string, text: string) {
+    if (!allowOutput()) return;
     await navigator.clipboard?.writeText(text);
     trackEvent("client_template_copied", { template_name: title });
+    recordTrialAction("quick_message_copied");
     setCopiedTool(title);
     window.setTimeout(() => setCopiedTool(""), 1600);
   }
 
-  if (!isPro) {
+  if (!trial && tab !== "regulators") {
     return (
       <section className="pro-landing">
         <div className="pro-hero">
@@ -698,8 +726,9 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
           <h1>Your morning intelligence desk.</h1>
           <p>Save time every working day with a focused briefing, action checklist, official-source watch, practical conversation cues and ready-to-edit client messages.</p>
           <div className="pro-price"><strong>₹399</strong><span>/ month<br />or ₹3,999 yearly</span></div>
-          <button onClick={activateDemo}>Preview Pro on this device <span>→</span></button>
-          <small>About ₹13 a day. Local product preview only—no account, payment or subscription.</small>
+          <button onClick={startTrial}>Start free local trial <span>→</span></button>
+          <a className="trial-regulator-link" href="/?view=pro&tab=regulators">Browse free Regulator Watch ↗</a>
+          <small>7 days and 10 client-content actions, whichever gives you longer. Device-local preview only—no payment or subscription.</small>
         </div>
         <div className="pro-feature-grid">
           <article><span>01</span><strong>Action desk</strong><p>Morning 5 plus a daily checklist that keeps the working day moving.</p></article>
@@ -714,9 +743,11 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   return (
     <section className="pro-workspace">
       <header className="pro-workspace-head">
-        <div><span className="pro-kicker">DISTRIBUTOR MODE · LOCAL PREVIEW</span><h1>Good morning{profile.name ? `, ${profile.name.split(" ")[0]}` : ""}.</h1><p>Your market, business and regulatory desk in one calm view.</p></div>
-        <span className="pro-status">PRO PREVIEW</span>
+        <div><span className="pro-kicker">DISTRIBUTOR PLATFORM · {trial ? "LOCAL TRIAL" : "FREE ACCESS"}</span><h1>Good morning{profile.name ? `, ${profile.name.split(" ")[0]}` : ""}.</h1><p>Your market, business and regulatory desk in one calm view.</p></div>
+        <span className={`pro-status ${trialStatus.locked ? "locked" : ""}`}>{!trial ? "FREE ACCESS" : trialStatus.locked ? "TRIAL COMPLETE" : `TRIAL DAY ${trialStatus.day}`}</span>
       </header>
+      {trial && <div className={`trial-meter ${trialStatus.locked ? "locked" : ""}`}><div><span>LOCAL TRIAL</span><strong>{trialProgress}</strong></div><p>Usage is stored only on this browser. News and official regulator access remain free.</p></div>}
+      {trialStatus.locked && <section className="trial-upgrade-banner"><div><span>CONTINUE WITH INTELFLOW PRO</span><h2>Your trial is complete.</h2><p>Client-content copying, image generation and exports are paused. The briefing and regulator sources remain available.</p></div><div><strong>₹399<small>/month</small></strong><a href="mailto:hello@swarnimcapital.com?subject=IntelFlow%20Pro%20early%20access" onClick={() => trackEvent("pro_upgrade_clicked", { placement: "trial_gate" })}>Request Pro access →</a><small>Early-access request only. No payment is collected here.</small></div></section>}
       <div className="pro-value-strip"><span>YOUR DAILY VALUE</span><strong>5 signals</strong><i /> <strong>4 actions</strong><i /> <strong>3 ready messages</strong></div>
       <nav className="pro-tabs" aria-label="Distributor Pro sections">
         <button className={tab === "desk" ? "active" : ""} onClick={() => navigateTab("desk")}>Daily workspace</button>
@@ -734,7 +765,7 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
           </section>
           <section className="quick-message-kit">
             <div className="pro-section-title"><div><span>ONE-TAP STARTERS</span><h2>Quick message kit</h2></div></div>
-            {quickMessages.map((message) => <article key={message.title}><strong>{message.title}</strong><p>{message.text}</p><button onClick={() => void copyTool(message.title, message.text)}>{copiedTool === message.title ? "Copied ✓" : "Copy message"}</button></article>)}
+            {quickMessages.map((message) => <article key={message.title}><strong>{message.title}</strong><p>{message.text}</p><button disabled={trialStatus.locked} onClick={() => void copyTool(message.title, message.text)}>{trialStatus.locked ? "Trial complete" : copiedTool === message.title ? "Copied ✓" : "Copy message"}</button></article>)}
             <small>Edit and review every message before sending. These templates are neutral starting points, not investment advice.</small>
           </section>
         </div>
@@ -787,11 +818,11 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
             <div><small>{activeStudioStory.source} · {activeStudioStory.age}</small><h3>{activeStudioStory.title}</h3><p>{shortStoryContext(activeStudioStory)}</p><a href={activeStudioStory.sourceUrl} target="_blank" rel="noreferrer">Verify original source ↗</a></div>
           </aside>
           <div className="content-note-compose">
-            <div className="content-note-head"><div><span className="pro-kicker">SHORT · ATTRIBUTED · NEUTRAL</span><h3>Editable client note</h3></div><button className="copy-note" onClick={() => void copyNote()}>{copied ? "Copied ✓" : "Copy note"}</button></div>
+            <div className="content-note-head"><div><span className="pro-kicker">SHORT · ATTRIBUTED · NEUTRAL</span><h3>Editable client note</h3></div><button className="copy-note" disabled={trialStatus.locked} onClick={() => void copyNote()}>{trialStatus.locked ? "Trial complete" : copied ? "Copied ✓" : "Copy note"}</button></div>
             <textarea className="editable-note" aria-label="Editable client message" value={draft} onChange={(event) => setDraft(event.target.value)} />
             <p className="compliance-note"><strong>Before sending:</strong> review accuracy, suitability, source context and your organisation’s compliance policy. IntelFlow does not approve communications or provide investment advice.</p>
           </div>
-        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} embedded onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
+        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} embedded trialLocked={trialStatus.locked} onTrialAction={recordTrialAction} onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
       </section>}
 
       {tab === "regulators" && <section className="regulator-page regulator-watch">
@@ -816,12 +847,14 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
 type SocialFormat = "square" | "portrait";
 type SocialTemplate = "signal" | "market" | "regulatory";
 
-function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStoryChange, embedded = false }: {
+function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStoryChange, onTrialAction, trialLocked = false, embedded = false }: {
   stories: Story[];
   profile: DistributorProfile;
   saveProfile: (next: DistributorProfile) => void;
   initialStory: Story | null;
   onStoryChange: (story: Story) => void;
+  onTrialAction: (action: string) => void;
+  trialLocked?: boolean;
   embedded?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -879,6 +912,7 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStory
   }
 
   async function generateCard() {
+    if (trialLocked) return;
     const blob = await makeBlob();
     if (!blob) return;
     trackEvent("social_card_generated", { item_id: String(story.id), format, template });
@@ -886,6 +920,7 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStory
   }
 
   async function shareCard() {
+    if (trialLocked) return;
     const blob = await makeBlob();
     if (!blob) return;
     const file = new File([blob], `intelflow-${story.id}-${format}.png`, { type: "image/png" });
@@ -893,11 +928,13 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStory
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: headline, text: buildCaption() });
         trackEvent("social_card_shared", { item_id: String(story.id), format, template });
+        onTrialAction("social_card_shared");
         setStatus("Share sheet opened—choose WhatsApp or another app.");
         return;
       }
       downloadSocialCard(blob, file.name);
       trackEvent("social_card_downloaded", { item_id: String(story.id), format, fallback: true });
+      onTrialAction("social_card_downloaded");
       setStatus("Image downloaded. Attach it in WhatsApp with the copied caption.");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -906,16 +943,20 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStory
   }
 
   async function downloadCard() {
+    if (trialLocked) return;
     const blob = await makeBlob();
     if (!blob) return;
     downloadSocialCard(blob, `intelflow-${story.id}-${format}.png`);
     trackEvent("social_card_downloaded", { item_id: String(story.id), format, fallback: false });
+    onTrialAction("social_card_downloaded");
     setStatus("PNG downloaded.");
   }
 
   async function copyCaption() {
+    if (trialLocked) return;
     await navigator.clipboard?.writeText(buildCaption());
     trackEvent("social_caption_copied", { item_id: String(story.id) });
+    onTrialAction("social_caption_copied");
     setStatus("Caption copied.");
   }
 
@@ -932,7 +973,7 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStory
       </div>
       <div className="studio-preview">
         <div className={`canvas-frame ${format}`}><canvas ref={canvasRef} aria-label="Generated social post preview" /></div>
-        <div className="studio-actions"><button type="button" onClick={() => void generateCard()}>Generate card</button><button type="button" className="primary" onClick={() => void shareCard()}>Share to WhatsApp</button><button type="button" onClick={() => void downloadCard()}>Download PNG</button><button type="button" onClick={() => void copyCaption()}>Copy caption</button></div>
+        <div className="studio-actions"><button type="button" disabled={trialLocked} onClick={() => void generateCard()}>{trialLocked ? "Trial complete" : "Generate card"}</button><button type="button" className="primary" disabled={trialLocked} onClick={() => void shareCard()}>Share to WhatsApp</button><button type="button" disabled={trialLocked} onClick={() => void downloadCard()}>Download PNG</button><button type="button" disabled={trialLocked} onClick={() => void copyCaption()}>Copy caption</button></div>
         {status && <p className="studio-status" role="status">{status}</p>}
         <p className="studio-disclaimer">Sharing opens the phone’s native share sheet when file sharing is supported. No image, logo or profile information is uploaded to IntelFlow.</p>
       </div>
@@ -1117,7 +1158,9 @@ function OfficialRegulatorLinks() {
   return <div className="official-links">{regulators.map(([name, url]) => <a key={name} href={url} target="_blank" rel="noreferrer" onClick={() => trackEvent("regulator_link_opened", { regulator: name })}>{name} ↗</a>)}</div>;
 }
 
-function Settings({ selected, isPro, reset }: { selected: string[]; isPro: boolean; reset: () => void }) {
+function Settings({ selected, trial, reset }: { selected: string[]; trial: TrialState | null; reset: () => void }) {
+  const status = getTrialStatus(trial);
+  const trialLabel = !trial ? "Trial not started" : status.locked ? "Local trial complete" : `Local trial · day ${status.day} · ${trial.actions}/${trialActions} outputs`;
   return (
     <section className="utility-page settings-page">
       <span className="eyebrow">SETTINGS</span><h1>Your IntelFlow.</h1><p>You’re browsing as a guest. Preferences and bookmarks are stored only on this device.</p>
@@ -1126,7 +1169,7 @@ function Settings({ selected, isPro, reset }: { selected: string[]; isPro: boole
         <div><span>Language</span><strong>English</strong></div>
         <div><span>Region</span><strong>India</strong></div>
         <div><span>Account sync</span><strong>Coming later</strong></div>
-        <div><span>Distributor Pro</span><strong>{isPro ? "Local preview active" : "Not active"}</strong></div>
+        <div><span>Distributor access</span><strong>{trialLabel}</strong></div>
       </div>
       <button className="reset-button" onClick={reset}>Choose interests again</button>
       <div className="legal-links">
