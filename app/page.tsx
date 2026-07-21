@@ -189,6 +189,26 @@ function impactSummary(impact: CompanyImpact) {
   return `${impact.name} (${impact.ticker}) — ${impact.direction}. ${impact.mechanism}`;
 }
 
+type DailyDeskAction = { id: string; title: string; reason: string; newsTriggered?: boolean };
+
+function buildDailyDeskActions(stories: Story[]) {
+  const text = stories.map((story) => `${story.title} ${story.summary}`).join(" ").toLowerCase();
+  const actions: DailyDeskAction[] = [
+    { id: "morning-five", title: "Read the Morning 5", reason: "Start with the five most relevant market, business and regulatory signals." },
+    { id: "company-impact", title: "Review Company Impact", reason: "Check the transmission channel and verification requirement before drawing a conclusion." },
+    { id: "regulator-watch", title: "Check official regulator updates", reason: "Use the authority’s own circular or notice as the source of truth." },
+    { id: "client-update", title: "Prepare one useful client update", reason: "Keep the client action short, neutral and connected to their existing plan." },
+  ];
+  const add = (action: DailyDeskAction) => { if (!actions.some((item) => item.id === action.id)) actions.push(action); };
+  if (stories.some((story) => story.tags.includes("Regulation"))) add({ id: "news-regulation", title: "Verify today’s regulatory headline", reason: "Confirm the official circular, effective date and affected category before communicating it.", newsTriggered: true });
+  if (/(crude oil|oil price|brent|opec)/.test(text)) add({ id: "news-oil", title: "Review crude-sensitive company links", reason: "Separate upstream, refining and input-cost effects instead of applying one direction to every company.", newsTriggered: true });
+  if (/(repo rate|interest rate|rate cut|rate hike|rbi policy|liquidity)/.test(text)) add({ id: "news-rates", title: "Check rate and liquidity transmission", reason: "Review funding costs, margins, credit demand and the timing of policy transmission.", newsTriggered: true });
+  if (stories.some((story) => story.tags.includes("US"))) add({ id: "news-us", title: "Note the India link from US news", reason: "Identify whether the channel is currency, rates, demand, technology spending or sentiment.", newsTriggered: true });
+  if (/(usfda|u\.s\. fda|fda approval|drug approval|gets nod)/.test(text)) add({ id: "news-pharma", title: "Confirm the pharma filing", reason: "Verify the product, company entity, launch status, market opportunity and competition.", newsTriggered: true });
+  if (stories.some((story) => getCompanyImpacts(story).some((impact) => impact.confidence === "High"))) add({ id: "news-company", title: "Verify direct company events", reason: "Check the exchange filing and identify the first financial line item that could change.", newsTriggered: true });
+  return actions.slice(0, 9);
+}
+
 const interests = [
   ["AI", "Artificial Intelligence", "✦"],
   ["India", "India", "IN"],
@@ -683,11 +703,11 @@ export default function Home() {
                     <div className="story-meta"><span>{story.source}</span><i /> <span>{story.age}</span></div>
                     <h2><a className="story-title-link" href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>{story.title}</a></h2>
                     <p>{story.summary}</p>
+                    <StoryCompanyImpact story={story} manualTickers={manualCompanyLinks[String(story.id)] || []} watchedTickers={companyWatchlist} />
                     <div className="coverage-row">
                       <span className="coverage-stack"><i /><i /><i /></span>
                       <span>{story.coverage > 1 ? `Connected from ${story.coverage} reports` : "Briefed from the original report"}</span>
                     </div>
-                    <StoryCompanyImpact story={story} manualTickers={manualCompanyLinks[String(story.id)] || []} watchedTickers={companyWatchlist} />
                     <div className="story-actions">
                       <a href={story.sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackEvent("source_opened", { item_id: String(story.id), source: story.source })}>Read full story <span>↗</span></a>
                       {story.tags.some((tag) => ["Markets", "Business", "India", "Regulation", "Personal Finance", "Economy", "US"].includes(tag)) && <button className="explain-button" onClick={() => { trackEvent("client_note_created", { item_id: String(story.id), entry_point: "feed" }); navigatePro("studio", story, "note"); }}>Explain to client</button>}
@@ -718,7 +738,14 @@ function topicColor(tag: string) {
 
 function StoryCompanyImpact({ story, manualTickers, watchedTickers }: { story: Story; manualTickers: string[]; watchedTickers: string[] }) {
   const impacts = getCompanyImpacts(story, manualTickers);
-  if (!impacts.length) return null;
+  const financeRelevant = story.tags.some((tag) => ["Markets", "Business", "India", "Regulation", "Personal Finance", "Economy", "Energy", "US"].includes(tag));
+  if (!impacts.length && !financeRelevant) return null;
+  if (!impacts.length) return <aside className="story-impact-card empty-impact" aria-label={`Company impact for ${story.title}`}>
+    <div className="story-impact-head"><span>◆ COMPANY IMPACT</span><small>Connection check complete</small></div>
+    <strong>No reliable listed-company match yet</strong>
+    <p>IntelFlow will not force a weak connection. Attach a company only if you can explain the transmission channel and verify it from a primary source.</p>
+    <div><span>NO AUTOMATIC TRADE VIEW</span><a href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`}>Attach company in Pro →</a></div>
+  </aside>;
   const watched = impacts.filter((impact) => watchedTickers.includes(impact.ticker)).length;
   return <aside className="story-impact-card" aria-label={`Company impact for ${story.title}`}>
     <div className="story-impact-head"><span>◆ COMPANY IMPACT</span><small>{impacts[0].confidence} confidence · {impacts[0].directness}</small></div>
@@ -775,6 +802,8 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   const [includeCompanyImpact, setIncludeCompanyImpact] = useState(false);
   const [attachStoryId, setAttachStoryId] = useState(String(stories[0]?.id || ""));
   const [attachTicker, setAttachTicker] = useState(companyUniverse[0].ticker);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const [completedDeskActions, setCompletedDeskActions] = useState<string[]>(() => storage.get(`intelflow:daily-desk:${todayKey}`, []));
   const contextCache = useRef(new Map<string, string>());
   const [articleContext, setArticleContext] = useState<{ storyId: number; text: string; status: "loading" | "article" | "fallback" }>({
     storyId: initialStory?.id || 0,
@@ -789,6 +818,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   const articleContextStatus = articleContext.storyId === activeStudioStory.id ? articleContext.status : "loading";
   const studioStoryOptions = [activeStudioStory, ...stories.filter((story) => story.id !== activeStudioStory.id)].slice(0, 40);
   const trialStatus = getTrialStatus(trial);
+  const dailyDeskActions = buildDailyDeskActions(stories);
   const requestedImpactId = typeof window !== "undefined" ? Number(new URLSearchParams(window.location.search).get("impact") || 0) : 0;
   const impactQueue = stories
     .map((story) => ({ story, impacts: getCompanyImpacts(story, manualCompanyLinks[String(story.id)]) }))
@@ -930,6 +960,15 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
     navigateTab("studio", story, "image");
   }
 
+  function toggleDeskAction(actionId: string) {
+    setCompletedDeskActions((current) => {
+      const next = current.includes(actionId) ? current.filter((item) => item !== actionId) : [...current, actionId];
+      storage.set(`intelflow:daily-desk:${todayKey}`, next);
+      trackEvent("daily_desk_action_updated", { action_id: actionId, completed: next.includes(actionId) });
+      return next;
+    });
+  }
+
   if (!trial && tab !== "regulators") {
     return (
       <section className="pro-landing">
@@ -968,6 +1007,10 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
       </nav>
 
       {tab === "desk" && <div className="unified-desk">
+        <section className="news-action-checklist">
+          <header><div><span className="pro-kicker">TODAY’S DISTRIBUTOR ACTIONS</span><h2>Action checklist</h2><p>Four core actions plus checks triggered by today’s live news. Completion stays only on this browser.</p></div><div><strong>{completedDeskActions.filter((id) => dailyDeskActions.some((action) => action.id === id)).length}/{dailyDeskActions.length}</strong><span>{dailyDeskActions.filter((action) => action.newsTriggered).length} news-triggered</span></div></header>
+          <div>{dailyDeskActions.map((action) => <button type="button" key={action.id} className={`${completedDeskActions.includes(action.id) ? "done" : ""} ${action.newsTriggered ? "news-triggered" : ""}`} onClick={() => toggleDeskAction(action.id)}><i>{completedDeskActions.includes(action.id) ? "✓" : ""}</i><span><strong>{action.title}</strong><small>{action.reason}</small></span>{action.newsTriggered && <b>FROM TODAY’S NEWS</b>}</button>)}</div>
+        </section>
         <section className="company-impact-hub" id="company-impact">
           <header className="impact-hub-hero"><div><span className="pro-kicker">NEW · NEWS-TO-COMPANY RESEARCH</span><h2>Company Impact</h2><p>Understand why a headline may matter, what financial variable to inspect and what still needs proof. These are research prompts—not buy, sell or hold recommendations.</p></div><div><strong>{impactQueue.length}</strong><span>live connections</span><small>{companyWatchlist.length} companies watched locally</small></div></header>
           <div className="impact-attach-bar">
@@ -1134,7 +1177,7 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
     const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
     const guidance = clientActionGuidance(story);
     const marketReadThrough = impact ? `\n\nCompany Impact: ${impactSummary(impact)}\nResearch posture: ${impact.posture}. Verify: ${impact.verify}` : "";
-    return `${headline}\n\n${context}${marketReadThrough}\n\nDo: ${guidance.do}\nDon't: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. No buy/sell view or research recommendation. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
+    return `${headline}\n\n${context}${marketReadThrough}\n\nWhat you can do: ${guidance.do}\nWhat to avoid: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. No buy/sell view or research recommendation. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
   }
 
   async function makeBlob() {
@@ -1464,7 +1507,7 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   }
   context.fillStyle = accent;
   context.font = "700 16px Arial, sans-serif";
-  context.fillText("CLIENT TAKEAWAY", margin + 24, panelY);
+  context.fillText("CLIENT ACTION PLAN", margin + 24, panelY);
   context.font = "700 15px Arial, sans-serif";
   context.fillText("DO", margin + 24, panelY + 34);
   context.fillStyle = "#eef2f3";
@@ -1472,7 +1515,7 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   wrapCanvasText(context, guidance.do, margin + 70, panelY + 34, width - margin * 2 - 100, 20, 1);
   context.fillStyle = "#d8a879";
   context.font = "700 15px Arial, sans-serif";
-  context.fillText("DON'T", margin + 24, panelY + 67);
+  context.fillText("AVOID", margin + 24, panelY + 67);
   context.fillStyle = "#eef2f3";
   context.font = "400 16px Arial, sans-serif";
   wrapCanvasText(context, guidance.dont, margin + 90, panelY + 67, width - margin * 2 - 120, 20, 1);
@@ -1500,18 +1543,18 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
 }
 
 function clientActionGuidance(story: Story) {
-  if (story.tags.includes("Regulation")) return { do: "Verify the official circular, effective date and who is affected.", dont: "Treat the headline as final compliance guidance." };
-  if (story.tags.includes("Personal Finance")) return { do: "Relate the update to the client's goals, horizon and liquidity needs.", dont: "Turn the headline into a product recommendation." };
-  if (story.tags.includes("US")) return { do: "Explain the possible India link through rates, currency or sentiment.", dont: "Assume the headline has a direct portfolio impact." };
-  if (story.tags.includes("Markets") || story.tags.includes("Economy")) return { do: "Use this as context and review it against the client's existing plan.", dont: "Suggest an immediate portfolio change from one headline." };
-  return { do: "Verify the source and explain the wider context calmly.", dont: "Present one headline as a reason for immediate action." };
+  if (story.tags.includes("Regulation")) return { do: "Continue with your current plan while we confirm whether the official change applies to you.", dont: "Stop, switch or add an investment only because of this headline." };
+  if (story.tags.includes("Personal Finance")) return { do: "Check whether your goal, time horizon or liquidity need has actually changed.", dont: "Choose a product or make a portfolio change from one news update." };
+  if (story.tags.includes("US")) return { do: "Treat this as global context and stay aligned with your agreed goals and time horizon.", dont: "Assume every US headline requires an immediate change to your India investments." };
+  if (story.tags.includes("Markets") || story.tags.includes("Economy")) return { do: "Stay with your agreed plan and tell us if your goals, horizon or cash needs have changed.", dont: "React to a single market session or headline by buying, selling or switching." };
+  return { do: "Use this update as context and continue with the plan built around your goals.", dont: "Make an immediate financial decision from this headline alone." };
 }
 
 function buildClientNote(story: Story, profile: DistributorProfile, context: string, impact: CompanyImpact | null = null) {
   const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
   const guidance = clientActionGuidance(story);
   const marketReadThrough = impact ? `\n\nCompany Impact — ${impact.ticker}: ${impact.direction}. ${impact.mechanism}\nResearch posture: ${impact.posture}. What to verify: ${impact.verify}` : "";
-  return `Hello,\n\n${story.title}\n\nIn short: ${context}${marketReadThrough}\n\nWhat to do: ${guidance.do}\nWhat not to do: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. This is not a research recommendation or a buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nDisclaimer: ${profile.disclaimer}`;
+  return `Hello,\n\n${story.title}\n\nIn short: ${context}${marketReadThrough}\n\nWhat you can do: ${guidance.do}\nWhat to avoid: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. This is not a research recommendation or a buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nDisclaimer: ${profile.disclaimer}`;
 }
 
 function conversationCue(story: Story) {
