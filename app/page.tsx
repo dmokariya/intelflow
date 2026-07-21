@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 declare global {
@@ -35,6 +35,8 @@ type DistributorProfile = {
   euin: string;
   phone: string;
   disclaimer: string;
+  brandColor: string;
+  logo: string;
 };
 
 const defaultDistributorProfile: DistributorProfile = {
@@ -43,6 +45,8 @@ const defaultDistributorProfile: DistributorProfile = {
   euin: "",
   phone: "",
   disclaimer: "Mutual fund investments are subject to market risks. Read all scheme-related documents carefully.",
+  brandColor: "#d0aa65",
+  logo: "",
 };
 
 const interests = [
@@ -216,7 +220,7 @@ export default function Home() {
     setSelected(storage.get("intelflow:interests", ["AI", "India", "Technology", "Markets"]));
     setBookmarks(storage.get("intelflow:bookmarks", []));
     setIsPro(storage.get("intelflow:pro-demo", false));
-    setProfile(storage.get("intelflow:distributor-profile", defaultDistributorProfile));
+    setProfile({ ...defaultDistributorProfile, ...storage.get("intelflow:distributor-profile", defaultDistributorProfile) });
     setMode(storage.get("intelflow:mode", "reader"));
     setReady(true);
     loadFeed();
@@ -475,8 +479,9 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   setProfile: (value: DistributorProfile) => void;
   initialStory: Story | null;
 }) {
-  const [tab, setTab] = useState<"desk" | "tools" | "regulators" | "notes" | "profile">(initialStory ? "notes" : "desk");
+  const [tab, setTab] = useState<"desk" | "social" | "regulators" | "notes" | "profile">(initialStory ? "notes" : "desk");
   const [noteStory, setNoteStory] = useState<Story | null>(initialStory);
+  const [socialStory, setSocialStory] = useState<Story | null>(initialStory);
   const [noteTone, setNoteTone] = useState<"client" | "whatsapp">("client");
   const [copied, setCopied] = useState(false);
   const [copiedTool, setCopiedTool] = useState("");
@@ -563,8 +568,8 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
         <div className="pro-feature-grid">
           <article><span>01</span><strong>Action desk</strong><p>Morning 5 plus a daily checklist that keeps the working day moving.</p></article>
           <article><span>02</span><strong>Practice feed</strong><p>Live stories converted into concise client-conversation angles.</p></article>
-          <article><span>03</span><strong>Message kit</strong><p>Short, neutral templates for common client follow-ups and headlines.</p></article>
-          <article><span>04</span><strong>Official watch</strong><p>Regulator links and verified source channels in one focused place.</p></article>
+          <article><span>03</span><strong>Social studio</strong><p>Create branded, compliant-ready social cards locally—without paid AI.</p></article>
+          <article><span>04</span><strong>Message + source kit</strong><p>Neutral client starters, regulator links and verified source channels.</p></article>
         </div>
       </section>
     );
@@ -578,52 +583,57 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
       </header>
       <div className="pro-value-strip"><span>YOUR DAILY VALUE</span><strong>5 signals</strong><i /> <strong>4 actions</strong><i /> <strong>3 ready messages</strong></div>
       <nav className="pro-tabs" aria-label="Distributor Pro sections">
-        <button className={tab === "desk" ? "active" : ""} onClick={() => setTab("desk")}>Today’s desk</button>
-        <button className={tab === "tools" ? "active" : ""} onClick={() => setTab("tools")}>Daily tools</button>
+        <button className={tab === "desk" ? "active" : ""} onClick={() => setTab("desk")}>Daily workspace</button>
+        <button className={tab === "social" ? "active" : ""} onClick={() => setTab("social")}>Social studio</button>
         <button className={tab === "regulators" ? "active" : ""} onClick={() => setTab("regulators")}>Regulator watch</button>
         <button className={tab === "notes" ? "active" : ""} onClick={() => setTab("notes")}>Client notes</button>
         <button className={tab === "profile" ? "active" : ""} onClick={() => setTab("profile")}>Profile</button>
       </nav>
 
-      {tab === "desk" && <div className="pro-desk-grid">
-        <section className="morning-five">
-          <div className="pro-section-title"><div><span>6-MINUTE READ</span><h2>Morning 5</h2></div><i>{morningFive.length || 5}</i></div>
-          {(morningFive.length ? morningFive : stories.slice(0, 5)).map((story, index) => <article key={story.id}>
-            <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p><button onClick={() => openClientNote(story, "morning_five")}>Create client note →</button></div>
-          </article>)}
-        </section>
-        <aside className="regulator-watch">
-          <div className="pro-section-title"><div><span>OFFICIAL-SOURCE WATCHLIST</span><h2>Regulator watch</h2></div></div>
-          <p className="watch-disclaimer">A monitoring workspace—not a substitute for checking the regulator’s official website or professional compliance advice.</p>
-          {regulatorAlerts.map((alert) => <article key={alert.authority}><span>{alert.authority}</span><strong>{alert.title}</strong><small>{alert.time}</small><i>{alert.level}</i></article>)}
-          <OfficialRegulatorLinks />
-        </aside>
+      {tab === "desk" && <div className="unified-desk">
+        <div className="desk-action-grid">
+          <section className="daily-checklist">
+            <div className="pro-section-title"><div><span>TODAY’S ROUTINE</span><h2>Action checklist</h2></div><i>{completedActions.length}/{dailyActions.length}</i></div>
+            {dailyActions.map((action) => <button key={action} className={completedActions.includes(action) ? "done" : ""} onClick={() => toggleAction(action)}><span>{completedActions.includes(action) ? "✓" : ""}</span><strong>{action}</strong></button>)}
+            <p>Only checklist completion is stored locally. Do not enter client information.</p>
+          </section>
+          <section className="quick-message-kit">
+            <div className="pro-section-title"><div><span>ONE-TAP STARTERS</span><h2>Quick message kit</h2></div></div>
+            {quickMessages.map((message) => <article key={message.title}><strong>{message.title}</strong><p>{message.text}</p><button onClick={() => void copyTool(message.title, message.text)}>{copiedTool === message.title ? "Copied ✓" : "Copy message"}</button></article>)}
+            <small>Edit and review every message before sending. These templates are neutral starting points, not investment advice.</small>
+          </section>
+        </div>
+        <div className="pro-desk-grid">
+          <section className="morning-five">
+            <div className="pro-section-title"><div><span>6-MINUTE READ</span><h2>Morning 5</h2></div><i>{morningFive.length || 5}</i></div>
+            {(morningFive.length ? morningFive : stories.slice(0, 5)).map((story, index) => <article key={story.id}>
+              <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p><div className="morning-actions"><button onClick={() => openClientNote(story, "morning_five")}>Client note →</button><button onClick={() => { setSocialStory(story); setTab("social"); }}>Social card →</button></div></div>
+            </article>)}
+          </section>
+          <aside className="regulator-watch">
+            <div className="pro-section-title"><div><span>OFFICIAL-SOURCE WATCHLIST</span><h2>Regulator watch</h2></div></div>
+            <p className="watch-disclaimer">A monitoring workspace—not a substitute for checking the regulator’s official website or professional compliance advice.</p>
+            {regulatorAlerts.map((alert) => <article key={alert.authority}><span>{alert.authority}</span><strong>{alert.title}</strong><small>{alert.time}</small><i>{alert.level}</i></article>)}
+            <OfficialRegulatorLinks />
+          </aside>
+        </div>
+        <div className="pro-tools-grid">
+          <section className="practice-feed">
+            <div className="pro-section-title"><div><span>LIVE RSS · PRACTICE EDGE</span><h2>Conversation cues</h2></div><i className="live-dot">LIVE</i></div>
+            {(practiceStories.length ? practiceStories : stories.slice(0, 6)).map((story) => <article key={story.id}><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><p><strong>Try this:</strong> {conversationCue(story)}</p><div><a href={story.sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackEvent("source_opened", { item_id: String(story.id), source: story.source, entry_point: "practice_feed" })}>Open source ↗</a><button onClick={() => openClientNote(story, "practice_feed")}>Make note →</button></div></article>)}
+          </section>
+          <aside className="x-source-watch">
+            <span className="pro-kicker">OFFICIAL X WATCH</span><h2>Useful source channels.</h2><p>Fast awareness only. Verify regulatory information on the authority’s official website before using it.</p>
+            <a href="https://x.com/SEBI_updates" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "SEBI_updates" })}><strong>@SEBI_updates</strong><span>Regulations and circulars ↗</span></a>
+            <a href="https://x.com/sebi_india" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "sebi_india" })}><strong>@sebi_india</strong><span>Investor education ↗</span></a>
+            <a href="https://x.com/RBI" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "RBI" })}><strong>@RBI</strong><span>Reserve Bank updates ↗</span></a>
+            <a href="https://x.com/RBIsays" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "RBIsays" })}><strong>@RBIsays</strong><span>Public awareness ↗</span></a>
+            <a href="https://x.com/MFSahiHai" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "MFSahiHai" })}><strong>@MFSahiHai</strong><span>Mutual fund education ↗</span></a>
+          </aside>
+        </div>
       </div>}
 
-      {tab === "tools" && <div className="pro-tools-grid">
-        <section className="daily-checklist">
-          <div className="pro-section-title"><div><span>TODAY’S ROUTINE</span><h2>Action checklist</h2></div><i>{completedActions.length}/{dailyActions.length}</i></div>
-          {dailyActions.map((action) => <button key={action} className={completedActions.includes(action) ? "done" : ""} onClick={() => toggleAction(action)}><span>{completedActions.includes(action) ? "✓" : ""}</span><strong>{action}</strong></button>)}
-          <p>Only checklist completion is stored locally. Do not enter client information.</p>
-        </section>
-        <section className="quick-message-kit">
-          <div className="pro-section-title"><div><span>ONE-TAP STARTERS</span><h2>Quick message kit</h2></div></div>
-          {quickMessages.map((message) => <article key={message.title}><strong>{message.title}</strong><p>{message.text}</p><button onClick={() => void copyTool(message.title, message.text)}>{copiedTool === message.title ? "Copied ✓" : "Copy message"}</button></article>)}
-          <small>Edit and review every message before sending. These templates are neutral starting points, not investment advice.</small>
-        </section>
-        <section className="practice-feed">
-          <div className="pro-section-title"><div><span>LIVE RSS · PRACTICE EDGE</span><h2>Conversation cues</h2></div><i className="live-dot">LIVE</i></div>
-          {(practiceStories.length ? practiceStories : stories.slice(0, 6)).map((story) => <article key={story.id}><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><p><strong>Try this:</strong> {conversationCue(story)}</p><div><a href={story.sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackEvent("source_opened", { item_id: String(story.id), source: story.source, entry_point: "practice_feed" })}>Open source ↗</a><button onClick={() => openClientNote(story, "practice_feed")}>Make note →</button></div></article>)}
-        </section>
-        <aside className="x-source-watch">
-          <span className="pro-kicker">OFFICIAL X WATCH</span><h2>Useful source channels.</h2><p>Fast awareness only. Verify regulatory information on the authority’s official website before using it.</p>
-          <a href="https://x.com/SEBI_updates" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "SEBI_updates" })}><strong>@SEBI_updates</strong><span>Regulations and circulars ↗</span></a>
-          <a href="https://x.com/sebi_india" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "sebi_india" })}><strong>@sebi_india</strong><span>Investor education ↗</span></a>
-          <a href="https://x.com/RBI" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "RBI" })}><strong>@RBI</strong><span>Reserve Bank updates ↗</span></a>
-          <a href="https://x.com/RBIsays" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "RBIsays" })}><strong>@RBIsays</strong><span>Public awareness ↗</span></a>
-          <a href="https://x.com/MFSahiHai" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "MFSahiHai" })}><strong>@MFSahiHai</strong><span>Mutual fund education ↗</span></a>
-        </aside>
-      </div>}
+      {tab === "social" && <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={socialStory} />}
 
       {tab === "regulators" && <section className="regulator-page regulator-watch">
         <div className="pro-section-title"><div><span>OFFICIAL UPDATES</span><h2>Regulator Watch</h2></div></div>
@@ -650,6 +660,281 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
       </form>}
     </section>
   );
+}
+
+type SocialFormat = "square" | "portrait";
+type SocialTemplate = "signal" | "market" | "regulatory";
+
+function SocialPostStudio({ stories, profile, saveProfile, initialStory }: {
+  stories: Story[];
+  profile: DistributorProfile;
+  saveProfile: (next: DistributorProfile) => void;
+  initialStory: Story | null;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const firstStory = initialStory || stories[0] || demoStories[0];
+  const [story, setStory] = useState<Story>(firstStory);
+  const [headline, setHeadline] = useState(firstStory.title);
+  const [context, setContext] = useState(shortStoryContext(firstStory));
+  const [format, setFormat] = useState<SocialFormat>("square");
+  const [template, setTemplate] = useState<SocialTemplate>("signal");
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    if (!initialStory) return;
+    setStory(initialStory);
+    setHeadline(initialStory.title);
+    setContext(shortStoryContext(initialStory));
+  }, [initialStory]);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    void renderSocialCard(canvasRef.current, { story, headline, context, profile, format, template });
+  }, [story, headline, context, profile, format, template]);
+
+  function chooseStory(next: Story) {
+    setStory(next);
+    setHeadline(next.title);
+    setContext(shortStoryContext(next));
+    setStatus("");
+  }
+
+  function uploadLogo(file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 1_000_000) {
+      setStatus("Use a PNG or JPG logo smaller than 1 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      saveProfile({ ...profile, logo: String(reader.result || "") });
+      setStatus("Logo saved on this device.");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function buildCaption() {
+    const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
+    return `${headline}\n\n${context}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. No buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
+  }
+
+  async function makeBlob() {
+    if (!canvasRef.current) return null;
+    await renderSocialCard(canvasRef.current, { story, headline, context, profile, format, template });
+    return new Promise<Blob | null>((resolve) => canvasRef.current?.toBlob(resolve, "image/png"));
+  }
+
+  async function generateCard() {
+    const blob = await makeBlob();
+    if (!blob) return;
+    trackEvent("social_card_generated", { item_id: String(story.id), format, template });
+    setStatus("Card ready to share or download.");
+  }
+
+  async function shareCard() {
+    const blob = await makeBlob();
+    if (!blob) return;
+    const file = new File([blob], `intelflow-${story.id}-${format}.png`, { type: "image/png" });
+    try {
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: headline, text: buildCaption() });
+        trackEvent("social_card_shared", { item_id: String(story.id), format, template });
+        setStatus("Share sheet opened—choose WhatsApp or another app.");
+        return;
+      }
+      downloadSocialCard(blob, file.name);
+      trackEvent("social_card_downloaded", { item_id: String(story.id), format, fallback: true });
+      setStatus("Image downloaded. Attach it in WhatsApp with the copied caption.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setStatus("Sharing is unavailable here. Use Download PNG instead.");
+    }
+  }
+
+  async function downloadCard() {
+    const blob = await makeBlob();
+    if (!blob) return;
+    downloadSocialCard(blob, `intelflow-${story.id}-${format}.png`);
+    trackEvent("social_card_downloaded", { item_id: String(story.id), format, fallback: false });
+    setStatus("PNG downloaded.");
+  }
+
+  async function copyCaption() {
+    await navigator.clipboard?.writeText(buildCaption());
+    trackEvent("social_caption_copied", { item_id: String(story.id) });
+    setStatus("Caption copied.");
+  }
+
+  return <section className="social-studio">
+    <header className="studio-intro"><div><span className="pro-kicker">NO-AI · LOCAL CREATION</span><h2>Social Post Studio</h2><p>Create a branded, attributed card on this device. Review every post before sharing.</p></div><strong>PRO TOOL</strong></header>
+    <div className="studio-layout">
+      <div className="studio-controls">
+        <label>Story<select value={story.id} onChange={(event) => { const next = stories.find((item) => String(item.id) === event.target.value); if (next) chooseStory(next); }}>{stories.slice(0, 20).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+        <fieldset><legend>Template</legend><div className="studio-options">{(["signal", "market", "regulatory"] as SocialTemplate[]).map((item) => <button type="button" key={item} className={template === item ? "active" : ""} onClick={() => setTemplate(item)}>{item === "signal" ? "Daily signal" : item === "market" ? "Market brief" : "Regulatory"}</button>)}</div></fieldset>
+        <fieldset><legend>Format</legend><div className="studio-options"><button type="button" className={format === "square" ? "active" : ""} onClick={() => setFormat("square")}>Square · 1080</button><button type="button" className={format === "portrait" ? "active" : ""} onClick={() => setFormat("portrait")}>Portrait · 1350</button></div></fieldset>
+        <label>Headline<textarea value={headline} maxLength={130} rows={3} onChange={(event) => setHeadline(event.target.value)} /></label>
+        <label>Short context<textarea value={context} maxLength={220} rows={4} onChange={(event) => setContext(event.target.value)} /></label>
+        <div className="studio-branding"><span className="pro-kicker">YOUR BRANDING</span><label>Brand colour<input type="color" value={profile.brandColor || "#d0aa65"} onChange={(event) => saveProfile({ ...profile, brandColor: event.target.value })} /></label><label className="logo-upload">Logo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => uploadLogo(event.target.files?.[0])} /><span>{profile.logo ? "Replace logo" : "Upload logo"}</span></label>{profile.logo && <button type="button" onClick={() => saveProfile({ ...profile, logo: "" })}>Remove logo</button>}<small>Name, ARN and EUIN come from your local Distributor Profile.</small></div>
+      </div>
+      <div className="studio-preview">
+        <div className={`canvas-frame ${format}`}><canvas ref={canvasRef} aria-label="Generated social post preview" /></div>
+        <div className="studio-actions"><button type="button" onClick={() => void generateCard()}>Generate card</button><button type="button" className="primary" onClick={() => void shareCard()}>Share to WhatsApp</button><button type="button" onClick={() => void downloadCard()}>Download PNG</button><button type="button" onClick={() => void copyCaption()}>Copy caption</button></div>
+        {status && <p className="studio-status" role="status">{status}</p>}
+        <p className="studio-disclaimer">Sharing opens the phone’s native share sheet when file sharing is supported. No image, logo or profile information is uploaded to IntelFlow.</p>
+      </div>
+    </div>
+  </section>;
+}
+
+function shortStoryContext(story: Story) {
+  const sentence = story.summary.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || story.summary;
+  return sentence.length > 210 ? `${sentence.slice(0, 207).trimEnd()}…` : sentence;
+}
+
+function downloadSocialCard(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function wrapCanvasText(context: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines: number) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (context.measureText(candidate).width <= maxWidth || !line) line = candidate;
+    else { lines.push(line); line = word; }
+  });
+  if (line) lines.push(line);
+  const clipped = lines.length > maxLines;
+  const visible = lines.slice(0, maxLines);
+  if (clipped && visible.length) {
+    while (context.measureText(`${visible[visible.length - 1]}…`).width > maxWidth) visible[visible.length - 1] = visible[visible.length - 1].split(" ").slice(0, -1).join(" ");
+    visible[visible.length - 1] += "…";
+  }
+  visible.forEach((item, index) => context.fillText(item, x, y + index * lineHeight));
+  return y + visible.length * lineHeight;
+}
+
+function loadCanvasImage(source: string) {
+  return new Promise<HTMLImageElement | null>((resolve) => {
+    if (!source) { resolve(null); return; }
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = source;
+  });
+}
+
+async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Story; headline: string; context: string; profile: DistributorProfile; format: SocialFormat; template: SocialTemplate }) {
+  const { story, headline, context: summary, profile, format, template } = options;
+  const width = 1080;
+  const height = format === "portrait" ? 1350 : 1080;
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const accent = profile.brandColor || "#d0aa65";
+  const backgrounds: Record<SocialTemplate, [string, string]> = { signal: ["#08121a", "#112839"], market: ["#071a18", "#12352e"], regulatory: ["#15101b", "#302037"] };
+  const [start, end] = backgrounds[template];
+  const gradient = context.createLinearGradient(0, 0, width, height);
+  gradient.addColorStop(0, start);
+  gradient.addColorStop(1, end);
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, width, height);
+
+  context.save();
+  context.globalAlpha = .12;
+  context.strokeStyle = "#9fc4d5";
+  context.lineWidth = 1;
+  for (let x = 0; x < width; x += 90) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke(); }
+  for (let y = 0; y < height; y += 90) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); }
+  context.globalAlpha = .36;
+  context.strokeStyle = accent;
+  context.lineWidth = 4;
+  context.beginPath();
+  context.moveTo(width * .58, height * .82);
+  context.bezierCurveTo(width * .72, height * .68, width * .74, height * .9, width * .88, height * .61);
+  context.bezierCurveTo(width * .94, height * .5, width * .94, height * .63, width * 1.04, height * .4);
+  context.stroke();
+  context.restore();
+
+  const margin = 76;
+  const logo = await loadCanvasImage(profile.logo);
+  if (logo) {
+    context.save();
+    context.beginPath();
+    context.roundRect(margin, 62, 88, 88, 18);
+    context.clip();
+    const scale = Math.max(88 / logo.width, 88 / logo.height);
+    context.drawImage(logo, margin + (88 - logo.width * scale) / 2, 62 + (88 - logo.height * scale) / 2, logo.width * scale, logo.height * scale);
+    context.restore();
+  } else {
+    context.strokeStyle = accent;
+    context.lineWidth = 3;
+    context.beginPath();
+    context.arc(margin + 44, 106, 43, 0, Math.PI * 2);
+    context.stroke();
+    context.fillStyle = accent;
+    context.font = "600 32px Georgia, serif";
+    context.textAlign = "center";
+    context.fillText("IF", margin + 44, 117);
+    context.textAlign = "left";
+  }
+  context.fillStyle = "#f1f5f6";
+  context.font = "600 32px Georgia, serif";
+  context.fillText(profile.name || "IntelFlow Pro", margin + 112, 99);
+  context.fillStyle = accent;
+  context.font = "700 15px Arial, sans-serif";
+  context.fillText("DISTRIBUTOR INTELLIGENCE", margin + 112, 128);
+
+  const category = template === "regulatory" ? "REGULATORY WATCH" : template === "market" ? "MARKET CONTEXT" : "DAILY SIGNAL";
+  context.fillStyle = accent;
+  context.font = "700 18px Arial, sans-serif";
+  context.fillText(`${category}  ·  ${story.tags.slice(0, 2).join(" + ").toUpperCase()}`, margin, 235);
+  context.fillStyle = "#f5f6f3";
+  context.font = `600 ${format === "portrait" ? 72 : 68}px Georgia, serif`;
+  let cursor = wrapCanvasText(context, headline, margin, 320, width - margin * 2, format === "portrait" ? 82 : 78, format === "portrait" ? 5 : 4);
+  cursor += 28;
+  context.fillStyle = "#aebbc1";
+  context.font = "400 29px Arial, sans-serif";
+  wrapCanvasText(context, summary, margin, cursor, width - margin * 2, 42, format === "portrait" ? 4 : 3);
+
+  const sourceY = height - 275;
+  context.fillStyle = "rgba(7,15,20,.72)";
+  context.roundRect(margin, sourceY, width - margin * 2, 150, 18);
+  context.fill();
+  context.fillStyle = accent;
+  context.font = "700 16px Arial, sans-serif";
+  context.fillText("SOURCE", margin + 24, sourceY + 35);
+  context.fillStyle = "#eef2f3";
+  context.font = "600 22px Arial, sans-serif";
+  context.fillText(story.source.slice(0, 62), margin + 24, sourceY + 70);
+  context.fillStyle = "#9ba8ae";
+  context.font = "400 15px Arial, sans-serif";
+  context.fillText("One headline alone does not require an immediate portfolio change.", margin + 24, sourceY + 96);
+  const disclaimer = profile.disclaimer.length > 112 ? `${profile.disclaimer.slice(0, 109).trimEnd()}…` : profile.disclaimer;
+  context.fillStyle = "#788990";
+  context.font = "400 13px Arial, sans-serif";
+  context.fillText(disclaimer, margin + 24, sourceY + 124);
+
+  context.strokeStyle = accent;
+  context.globalAlpha = .65;
+  context.beginPath(); context.moveTo(margin, height - 92); context.lineTo(width - margin, height - 92); context.stroke();
+  context.globalAlpha = 1;
+  const identity = [profile.arn, profile.euin].filter(Boolean).join("  ·  ");
+  context.fillStyle = "#f1f4f5";
+  context.font = "600 17px Arial, sans-serif";
+  context.fillText(identity || "IntelFlow · Distributor Pro", margin, height - 55);
+  context.textAlign = "right";
+  context.fillStyle = "#91a0a8";
+  context.font = "400 14px Arial, sans-serif";
+  context.fillText("For information only · Verify the original source", width - margin, height - 55);
+  context.textAlign = "left";
 }
 
 function buildClientNote(story: Story, profile: DistributorProfile, tone: "client" | "whatsapp") {
