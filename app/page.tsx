@@ -30,10 +30,11 @@ type Story = {
 };
 
 type AppPage = "feed" | "saved" | "discover" | "pro" | "settings";
-type ProTab = "desk" | "social" | "regulators" | "notes" | "profile";
+type ProTab = "desk" | "studio" | "regulators" | "profile";
+type StudioTool = "note" | "image";
 
 const appPages: AppPage[] = ["feed", "saved", "discover", "pro", "settings"];
-const proTabs: ProTab[] = ["desk", "social", "regulators", "notes", "profile"];
+const proTabs: ProTab[] = ["desk", "studio", "regulators", "profile"];
 
 type DistributorProfile = {
   name: string;
@@ -213,6 +214,7 @@ export default function Home() {
   const [bookmarks, setBookmarks] = useState<number[]>([]);
   const [page, setPage] = useState<AppPage>("feed");
   const [proTab, setProTab] = useState<ProTab>("desk");
+  const [studioTool, setStudioTool] = useState<StudioTool>("note");
   const [menuOpen, setMenuOpen] = useState(false);
   const [feedStories, setFeedStories] = useState<Story[]>(demoStories);
   const [isPro, setIsPro] = useState(false);
@@ -234,15 +236,24 @@ export default function Home() {
     const applyUrlState = () => {
       const parameters = new URLSearchParams(window.location.search);
       const requestedPage = parameters.get("view") as AppPage | null;
-      const requestedTab = parameters.get("tab") as ProTab | null;
+      const requestedTab = parameters.get("tab");
       const nextPage = requestedPage && appPages.includes(requestedPage) ? requestedPage : "feed";
-      const nextTab = requestedTab && proTabs.includes(requestedTab) ? requestedTab : "desk";
+      const legacyStudioTab = requestedTab === "social" || requestedTab === "notes";
+      const nextTab = legacyStudioTab ? "studio" : requestedTab && proTabs.includes(requestedTab as ProTab) ? requestedTab as ProTab : "desk";
+      const requestedTool = parameters.get("tool");
       setPage(nextPage);
       setProTab(nextTab);
+      setStudioTool(requestedTool === "image" || requestedTab === "social" ? "image" : "note");
       setActiveTag(parameters.get("topic") || "For you");
       const requestedLimit = Number(parameters.get("limit") || 20);
       setVisibleCount(Number.isFinite(requestedLimit) ? Math.max(20, Math.min(80, requestedLimit)) : 20);
       setMode(nextPage === "pro" ? "distributor" : "reader");
+      if (legacyStudioTab) {
+        const canonicalUrl = new URL(window.location.href);
+        canonicalUrl.searchParams.set("tab", "studio");
+        canonicalUrl.searchParams.set("tool", requestedTab === "social" ? "image" : "note");
+        window.history.replaceState({}, "", `${canonicalUrl.pathname}${canonicalUrl.search}${canonicalUrl.hash}`);
+      }
     };
     applyUrlState();
     window.addEventListener("popstate", applyUrlState);
@@ -308,7 +319,7 @@ export default function Home() {
     });
   }
 
-  function writeAppUrl(nextPage: AppPage, options: { tab?: ProTab; story?: Story | null; topic?: string } = {}) {
+  function writeAppUrl(nextPage: AppPage, options: { tab?: ProTab; story?: Story | null; topic?: string; tool?: StudioTool } = {}) {
     const url = new URL(window.location.href);
     url.searchParams.set("view", nextPage);
     url.searchParams.delete("limit");
@@ -316,10 +327,13 @@ export default function Home() {
       url.searchParams.set("tab", options.tab || proTab);
       if (options.story) url.searchParams.set("story", String(options.story.id));
       else url.searchParams.delete("story");
+      if ((options.tab || proTab) === "studio") url.searchParams.set("tool", options.tool || studioTool);
+      else url.searchParams.delete("tool");
       url.searchParams.delete("topic");
     } else {
       url.searchParams.delete("tab");
       url.searchParams.delete("story");
+      url.searchParams.delete("tool");
       const topic = options.topic ?? (nextPage === "feed" ? activeTag : "For you");
       if (nextPage === "feed" && topic !== "For you") url.searchParams.set("topic", topic);
       else url.searchParams.delete("topic");
@@ -337,14 +351,15 @@ export default function Home() {
     writeAppUrl(next);
   }
 
-  function navigatePro(nextTab: ProTab, story: Story | null = null) {
+  function navigatePro(nextTab: ProTab, story: Story | null = null, tool: StudioTool = studioTool) {
     setProTab(nextTab);
+    setStudioTool(tool);
     setPage("pro");
     setMode("distributor");
     setMenuOpen(false);
     storage.set("intelflow:mode", "distributor");
     setExplainStory(story);
-    writeAppUrl("pro", { tab: nextTab, story });
+    writeAppUrl("pro", { tab: nextTab, story, tool });
   }
 
   function chooseTopic(topic: string) {
@@ -473,7 +488,7 @@ export default function Home() {
       )}
 
       {page === "discover" && <Discover selected={selected} setSelected={setSelected} />}
-      {page === "pro" && <DistributorPro stories={feedStories} isPro={isPro} setIsPro={setIsPro} profile={profile} setProfile={setProfile} initialStory={explainStory} tab={proTab} navigateTab={navigatePro} />}
+      {page === "pro" && <DistributorPro stories={feedStories} isPro={isPro} setIsPro={setIsPro} profile={profile} setProfile={setProfile} initialStory={explainStory} tab={proTab} tool={studioTool} navigateTab={navigatePro} />}
       {page === "settings" && <Settings selected={selected} isPro={isPro} reset={() => { storage.set("intelflow:onboarded", false); setOnboarded(false); }} />}
 
       {(page === "feed" || page === "saved") && (
@@ -512,7 +527,7 @@ export default function Home() {
                     </div>
                     <div className="story-actions">
                       <a href={story.sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackEvent("source_opened", { item_id: String(story.id), source: story.source })}>Read full story <span>↗</span></a>
-                      {story.tags.some((tag) => ["Markets", "Business", "India"].includes(tag)) && <button className="explain-button" onClick={() => { trackEvent("client_note_created", { item_id: String(story.id), entry_point: "feed" }); navigatePro("notes", story); }}>Explain to client</button>}
+                      {story.tags.some((tag) => ["Markets", "Business", "India", "Regulation", "Personal Finance", "Economy", "US"].includes(tag)) && <button className="explain-button" onClick={() => { trackEvent("client_note_created", { item_id: String(story.id), entry_point: "feed" }); navigatePro("studio", story, "note"); }}>Explain to client</button>}
                       <button className="share-button" onClick={() => void shareStory(story)} aria-label={`Share ${story.title}`}><span>Share</span><i>⤴</i></button>
                     </div>
                   </div>
@@ -587,7 +602,7 @@ function selectMorningFive(stories: Story[]) {
   return selected.slice(0, 5);
 }
 
-function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initialStory, tab, navigateTab }: {
+function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initialStory, tab, tool, navigateTab }: {
   stories: Story[];
   isPro: boolean;
   setIsPro: (value: boolean) => void;
@@ -595,11 +610,10 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   setProfile: (value: DistributorProfile) => void;
   initialStory: Story | null;
   tab: ProTab;
-  navigateTab: (tab: ProTab, story?: Story | null) => void;
+  tool: StudioTool;
+  navigateTab: (tab: ProTab, story?: Story | null, tool?: StudioTool) => void;
 }) {
-  const [noteStory, setNoteStory] = useState<Story | null>(initialStory);
-  const [socialStory, setSocialStory] = useState<Story | null>(initialStory);
-  const [noteTone, setNoteTone] = useState<"client" | "whatsapp">("client");
+  const [studioStory, setStudioStory] = useState<Story | null>(initialStory);
   const [copied, setCopied] = useState(false);
   const [copiedTool, setCopiedTool] = useState("");
   const [draft, setDraft] = useState("");
@@ -607,6 +621,8 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   const [completedActions, setCompletedActions] = useState<string[]>(() => storage.get(`intelflow:pro-actions:${todayKey}`, []));
   const morningFive = selectMorningFive(stories);
   const practiceStories = stories.filter((story) => story.tags.some((tag) => ["Markets", "Regulation", "Personal Finance", "US", "Economy"].includes(tag))).slice(0, 6);
+  const activeStudioStory = studioStory || stories[0] || demoStories[0];
+  const studioStoryOptions = [activeStudioStory, ...stories.filter((story) => story.id !== activeStudioStory.id)].slice(0, 40);
   const dailyActions = ["Read the Morning 5", "Check official regulator updates", "Prepare one neutral client note", "Review pending follow-ups"];
   const quickMessages = [
     { title: "Market check-in", text: "Hello. Markets are moving today, but one session alone does not require an immediate portfolio change. Let me know if your goals, time horizon or liquidity needs have changed." },
@@ -622,11 +638,8 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   ];
 
   useEffect(() => {
-    if (initialStory) {
-      if (tab === "notes") setNoteStory(initialStory);
-      if (tab === "social") setSocialStory(initialStory);
-    }
-  }, [initialStory, tab]);
+    if (initialStory) setStudioStory(initialStory);
+  }, [initialStory]);
 
   function activateDemo() {
     storage.set("intelflow:pro-demo", true);
@@ -640,20 +653,26 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   }
 
   useEffect(() => {
-    setDraft(noteStory ? buildClientNote(noteStory, profile, noteTone) : "");
-  }, [noteStory, noteTone, profile]);
+    setDraft(buildClientNote(activeStudioStory, profile));
+  }, [activeStudioStory, profile]);
 
   async function copyNote() {
     await navigator.clipboard?.writeText(draft);
-    if (noteStory) trackEvent("client_note_copied", { item_id: String(noteStory.id), tone: noteTone });
+    trackEvent("client_note_copied", { item_id: String(activeStudioStory.id), format: "written" });
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
   }
 
   function openClientNote(story: Story, entryPoint: string) {
     trackEvent("client_note_created", { item_id: String(story.id), entry_point: entryPoint });
-    setNoteStory(story);
-    navigateTab("notes", story);
+    setStudioStory(story);
+    navigateTab("studio", story, "note");
+  }
+
+  function openSocialCard(story: Story, entryPoint: string) {
+    trackEvent("social_studio_opened", { item_id: String(story.id), entry_point: entryPoint });
+    setStudioStory(story);
+    navigateTab("studio", story, "image");
   }
 
   function toggleAction(action: string) {
@@ -685,8 +704,8 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
         <div className="pro-feature-grid">
           <article><span>01</span><strong>Action desk</strong><p>Morning 5 plus a daily checklist that keeps the working day moving.</p></article>
           <article><span>02</span><strong>Practice feed</strong><p>Live stories converted into concise client-conversation angles.</p></article>
-          <article><span>03</span><strong>Social studio</strong><p>Create branded, compliant-ready social cards locally—without paid AI.</p></article>
-          <article><span>04</span><strong>Message + source kit</strong><p>Neutral client starters, regulator links and verified source channels.</p></article>
+          <article><span>03</span><strong>Client content studio</strong><p>Turn one headline into a concise note or an attention-grabbing branded image.</p></article>
+          <article><span>04</span><strong>Source + compliance kit</strong><p>Neutral starters, regulator links, attribution and review reminders in one workflow.</p></article>
         </div>
       </section>
     );
@@ -701,9 +720,8 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
       <div className="pro-value-strip"><span>YOUR DAILY VALUE</span><strong>5 signals</strong><i /> <strong>4 actions</strong><i /> <strong>3 ready messages</strong></div>
       <nav className="pro-tabs" aria-label="Distributor Pro sections">
         <button className={tab === "desk" ? "active" : ""} onClick={() => navigateTab("desk")}>Daily workspace</button>
-        <button className={tab === "social" ? "active" : ""} onClick={() => navigateTab("social")}>Social studio</button>
+        <button className={tab === "studio" ? "active" : ""} onClick={() => navigateTab("studio", activeStudioStory, tool)}>Client studio</button>
         <button className={tab === "regulators" ? "active" : ""} onClick={() => navigateTab("regulators")}>Regulator watch</button>
-        <button className={tab === "notes" ? "active" : ""} onClick={() => navigateTab("notes")}>Client notes</button>
         <button className={tab === "profile" ? "active" : ""} onClick={() => navigateTab("profile")}>Profile</button>
       </nav>
 
@@ -724,7 +742,7 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
           <section className="morning-five">
             <div className="pro-section-title"><div><span>6-MINUTE READ</span><h2>Morning 5</h2></div><i>{morningFive.length || 5}</i></div>
             {(morningFive.length ? morningFive : stories.slice(0, 5)).map((story, index) => <article key={story.id}>
-              <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p><div className="morning-actions"><button onClick={() => openClientNote(story, "morning_five")}>Client note →</button><button onClick={() => { setSocialStory(story); navigateTab("social", story); }}>Social card →</button></div></div>
+              <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p><div className="morning-actions"><button onClick={() => openClientNote(story, "morning_five")}>Write note →</button><button onClick={() => openSocialCard(story, "morning_five")}>Create image →</button></div></div>
             </article>)}
           </section>
           <aside className="regulator-watch">
@@ -750,7 +768,31 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
         </div>
       </div>}
 
-      {tab === "social" && <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={socialStory} onStoryChange={(story) => { setSocialStory(story); navigateTab("social", story); }} />}
+      {tab === "studio" && <section className="client-content-studio">
+        <header className="content-studio-hero">
+          <div><span className="pro-kicker">ONE HEADLINE · TWO READY OUTPUTS</span><h2>Turn news into client-ready content.</h2><p>Write a short, neutral explanation or create a branded social image—without uploading client or profile data.</p></div>
+          <strong>LOCAL · NO AI COST</strong>
+        </header>
+        <div className="content-studio-toolbar">
+          <label><span>Selected headline</span><select value={activeStudioStory.id} onChange={(event) => { const next = studioStoryOptions.find((story) => String(story.id) === event.target.value); if (next) { setStudioStory(next); navigateTab("studio", next, tool); } }}>{studioStoryOptions.map((story) => <option key={story.id} value={story.id}>{story.title}</option>)}</select></label>
+          <div className="content-mode-switch" role="tablist" aria-label="Choose client content format">
+            <button role="tab" aria-selected={tool === "note"} className={tool === "note" ? "active" : ""} onClick={() => navigateTab("studio", activeStudioStory, "note")}><span>✎</span><strong>Written note</strong><small>Copy and send</small></button>
+            <button role="tab" aria-selected={tool === "image"} className={tool === "image" ? "active" : ""} onClick={() => navigateTab("studio", activeStudioStory, "image")}><span>▣</span><strong>Social image</strong><small>Design and share</small></button>
+          </div>
+        </div>
+
+        {tool === "note" ? <div className="content-note-workspace">
+          <aside className="content-story-brief">
+            <div className="content-story-image"><img src={activeStudioStory.image} alt="" /><span>{activeStudioStory.tags.slice(0, 2).join(" · ")}</span></div>
+            <div><small>{activeStudioStory.source} · {activeStudioStory.age}</small><h3>{activeStudioStory.title}</h3><p>{shortStoryContext(activeStudioStory)}</p><a href={activeStudioStory.sourceUrl} target="_blank" rel="noreferrer">Verify original source ↗</a></div>
+          </aside>
+          <div className="content-note-compose">
+            <div className="content-note-head"><div><span className="pro-kicker">SHORT · ATTRIBUTED · NEUTRAL</span><h3>Editable client note</h3></div><button className="copy-note" onClick={() => void copyNote()}>{copied ? "Copied ✓" : "Copy note"}</button></div>
+            <textarea className="editable-note" aria-label="Editable client message" value={draft} onChange={(event) => setDraft(event.target.value)} />
+            <p className="compliance-note"><strong>Before sending:</strong> review accuracy, suitability, source context and your organisation’s compliance policy. IntelFlow does not approve communications or provide investment advice.</p>
+          </div>
+        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} embedded onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
+      </section>}
 
       {tab === "regulators" && <section className="regulator-page regulator-watch">
         <div className="pro-section-title"><div><span>OFFICIAL UPDATES</span><h2>Regulator Watch</h2></div></div>
@@ -758,14 +800,6 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
         {regulatorAlerts.map((alert) => <article key={alert.authority}><span>{alert.authority}</span><strong>{alert.title}</strong><small>{alert.time}</small><i>{alert.level}</i></article>)}
         <OfficialRegulatorLinks />
       </section>}
-
-      {tab === "notes" && <div className="note-builder">
-        <div className="note-source-list"><span className="pro-kicker">CHOOSE A SIGNAL</span><h2>Start with today’s briefing.</h2>{stories.slice(0, 8).map((story) => <button className={noteStory?.id === story.id ? "active" : ""} key={story.id} onClick={() => openClientNote(story, "client_notes_tab")}><small>{story.tags[0]}</small><strong>{story.title}</strong></button>)}</div>
-        <div className="note-preview">
-          <div className="note-toolbar"><div><button className={noteTone === "client" ? "active" : ""} onClick={() => setNoteTone("client")}>Client update</button><button className={noteTone === "whatsapp" ? "active" : ""} onClick={() => setNoteTone("whatsapp")}>WhatsApp</button></div>{noteStory && <button className="copy-note" onClick={() => void copyNote()}>{copied ? "Copied ✓" : "Copy note"}</button>}</div>
-          {noteStory ? <><textarea className="editable-note" aria-label="Editable client message" value={draft} onChange={(event) => setDraft(event.target.value)} /><p className="compliance-note"><strong>Before sending:</strong> review accuracy, suitability, source context and your organisation’s compliance policy. IntelFlow does not approve communications or provide investment advice.</p></> : <div className="note-empty"><span>✦</span><h3>Select a story</h3><p>We’ll structure an editable, attributed client update for your review.</p></div>}
-        </div>
-      </div>}
 
       {tab === "profile" && <form className="profile-editor" onSubmit={(event) => event.preventDefault()}>
         <div><span className="pro-kicker">DISTRIBUTOR IDENTITY</span><h2>Your client-note footer.</h2><p>Saved only in this browser during the preview. Do not enter client data.</p></div>
@@ -782,12 +816,13 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
 type SocialFormat = "square" | "portrait";
 type SocialTemplate = "signal" | "market" | "regulatory";
 
-function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStoryChange }: {
+function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStoryChange, embedded = false }: {
   stories: Story[];
   profile: DistributorProfile;
   saveProfile: (next: DistributorProfile) => void;
   initialStory: Story | null;
   onStoryChange: (story: Story) => void;
+  embedded?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const firstStory = initialStory || stories[0] || demoStories[0];
@@ -885,10 +920,10 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStory
   }
 
   return <section className="social-studio">
-    <header className="studio-intro"><div><span className="pro-kicker">NO-AI · LOCAL CREATION</span><h2>Social Post Studio</h2><p>Create a branded, attributed card on this device. Review every post before sharing.</p></div><strong>PRO TOOL</strong></header>
+    {!embedded && <header className="studio-intro"><div><span className="pro-kicker">NO-AI · LOCAL CREATION</span><h2>Social Post Studio</h2><p>Create a branded, attributed card on this device. Review every post before sharing.</p></div><strong>PRO TOOL</strong></header>}
     <div className="studio-layout">
       <div className="studio-controls">
-        <label>Story<select value={story.id} onChange={(event) => { const next = stories.find((item) => String(item.id) === event.target.value); if (next) chooseStory(next); }}>{stories.slice(0, 20).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+        {!embedded && <label>Story<select value={story.id} onChange={(event) => { const next = stories.find((item) => String(item.id) === event.target.value); if (next) chooseStory(next); }}>{stories.slice(0, 20).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}
         <fieldset><legend>Template</legend><div className="studio-options">{(["signal", "market", "regulatory"] as SocialTemplate[]).map((item) => <button type="button" key={item} className={template === item ? "active" : ""} onClick={() => setTemplate(item)}>{item === "signal" ? "Daily signal" : item === "market" ? "Market brief" : "Regulatory"}</button>)}</div></fieldset>
         <fieldset><legend>Format</legend><div className="studio-options"><button type="button" className={format === "square" ? "active" : ""} onClick={() => setFormat("square")}>Square · 1080</button><button type="button" className={format === "portrait" ? "active" : ""} onClick={() => setFormat("portrait")}>Portrait · 1350</button></div></fieldset>
         <label>Headline<textarea value={headline} maxLength={130} rows={3} onChange={(event) => setHeadline(event.target.value)} /></label>
@@ -1056,12 +1091,11 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   context.textAlign = "left";
 }
 
-function buildClientNote(story: Story, profile: DistributorProfile, tone: "client" | "whatsapp") {
-  const greeting = tone === "whatsapp" ? "Good morning 👋\n\n" : "Client update\n\n";
+function buildClientNote(story: Story, profile: DistributorProfile) {
   const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
   const firstSentence = story.summary.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || story.summary;
   const shortContext = firstSentence.length > 180 ? `${firstSentence.slice(0, 177).trimEnd()}…` : firstSentence;
-  return `${greeting}${story.title}\n\nIn short: ${shortContext}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nNo buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nDisclaimer: ${profile.disclaimer}`;
+  return `Hello,\n\n${story.title}\n\nIn short: ${shortContext}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nNo buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nDisclaimer: ${profile.disclaimer}`;
 }
 
 function conversationCue(story: Story) {
