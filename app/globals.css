@@ -237,3 +237,6 @@ body { color:var(--ink); }
 .studio-status { width:min(100%,580px); margin:12px 0 0; padding:9px 11px; color:#b9d5c7; border-radius:8px; background:#10251f; font-size:8px; text-align:center; }.studio-disclaimer { width:min(100%,580px); margin:12px 0 0; color:#718089; font-size:7px; line-height:1.5; text-align:center; }
 @media(max-width:820px) { .studio-layout { grid-template-columns:1fr; }.studio-controls { border-right:0; border-bottom:1px solid #2b3942; }.desk-action-grid { grid-template-columns:1fr; } }
 @media(max-width:520px) { .studio-intro { padding:20px; }.studio-intro h2 { font-size:29px; }.studio-intro>strong { display:none; }.studio-controls,.studio-preview { padding:18px; }.studio-actions { grid-template-columns:1fr 1fr; }.morning-actions { gap:12px; } }
+
+.feed-load-more { width:min(100%,420px); margin:24px auto 0; padding:13px 17px; display:flex; align-items:center; justify-content:space-between; gap:16px; color:#e7ecee; border:1px solid #3b4b55; border-radius:999px; background:#111c24; box-shadow:0 12px 30px rgba(0,0,0,.2); font-size:9px; font-weight:900; cursor:pointer; }
+.feed-load-more:hover { border-color:#d0aa65; }.feed-load-more span { color:#d0aa65; font-size:8px; font-weight:700; }
