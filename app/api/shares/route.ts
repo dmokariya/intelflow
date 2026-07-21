@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { trustedPublisherUrl } from "../../../lib/trusted-publishers";
-import { createShareRecord, getShareImageBucket, hashOwnerToken, randomUrlToken } from "../../../lib/share-store";
+import { createShareRecord, getShareImageStore, hashOwnerToken, randomUrlToken } from "../../../lib/share-store";
 
 export const dynamic = "force-dynamic";
 
@@ -76,8 +76,10 @@ export async function POST(request: NextRequest) {
     const id = randomUrlToken(9);
     const ownerToken = randomUrlToken(24);
     const imageKey = `shares/${id}.png`;
-    const bucket = getShareImageBucket();
-    await bucket.put(imageKey, image, { httpMetadata: { contentType: "image/png", cacheControl: "public, max-age=300" } });
+    const expiresAt = createdAt + expiryDays * 86_400_000;
+    const imageStore = getShareImageStore();
+    const imageBytes = image.buffer.slice(image.byteOffset, image.byteOffset + image.byteLength) as ArrayBuffer;
+    await imageStore.put(imageKey, imageBytes, { expiration: Math.floor(expiresAt / 1000) + 300, metadata: { contentType: "image/png" } });
     try {
       await createShareRecord({
         id,
@@ -96,15 +98,15 @@ export async function POST(request: NextRequest) {
         brandColor: /^#[0-9a-f]{6}$/i.test(payload.profile?.brandColor || "") ? payload.profile!.brandColor! : "#d0aa65",
         imageKey,
         createdAt,
-        expiresAt: createdAt + expiryDays * 86_400_000,
+        expiresAt,
       });
     } catch (error) {
-      await bucket.delete(imageKey);
+      await imageStore.delete(imageKey);
       throw error;
     }
 
     const url = new URL(`/share/${id}`, request.nextUrl.origin).toString();
-    return NextResponse.json({ share: { id, url, ownerToken, createdAt, expiresAt: createdAt + expiryDays * 86_400_000, title } }, { status: 201, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ share: { id, url, ownerToken, createdAt, expiresAt, title } }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ error: "The share link could not be created. Please try again." }, { status: 500 });
   }

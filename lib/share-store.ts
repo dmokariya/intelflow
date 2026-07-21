@@ -6,10 +6,10 @@ import { shares } from "../db/schema";
 export type ShareRecord = typeof shares.$inferSelect;
 export type ShareMetric = "views" | "sourceClicks" | "contactClicks";
 
-export function getShareImageBucket() {
-  const bucket = (env as unknown as { SHARE_IMAGES?: R2Bucket }).SHARE_IMAGES;
-  if (!bucket) throw new Error("Cloudflare R2 binding `SHARE_IMAGES` is unavailable.");
-  return bucket;
+export function getShareImageStore() {
+  const store = (env as unknown as { SHARE_IMAGES?: KVNamespace }).SHARE_IMAGES;
+  if (!store) throw new Error("Cloudflare KV binding `SHARE_IMAGES` is unavailable.");
+  return store;
 }
 
 export async function createShareRecord(record: typeof shares.$inferInsert) {

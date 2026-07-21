@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getShareImageBucket, getShareRecord, hashOwnerToken, publicShare, revokeShareRecord, shareIsActive } from "../../../../lib/share-store";
+import { getShareImageStore, getShareRecord, hashOwnerToken, publicShare, revokeShareRecord, shareIsActive } from "../../../../lib/share-store";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +29,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (!record || await hashOwnerToken(token) !== record.ownerTokenHash) return NextResponse.json({ error: "Owner access is required." }, { status: 401 });
   if (!record.revokedAt) {
     await revokeShareRecord(id);
-    await getShareImageBucket().delete(record.imageKey);
+    await getShareImageStore().delete(record.imageKey);
   }
   return NextResponse.json({ revoked: true }, { headers: { "Cache-Control": "no-store" } });
 }
