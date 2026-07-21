@@ -1,4 +1,25 @@
-// Intentionally empty by default.
-// Add Drizzle tables here when the site actually needs a database.
-// See examples/d1/db/schema.ts for an opt-in example.
-export {};
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const shares = sqliteTable("shares", {
+  id: text("id").primaryKey(),
+  ownerTokenHash: text("owner_token_hash").notNull(),
+  storyTitle: text("story_title").notNull(),
+  storyContext: text("story_context").notNull(),
+  actionDo: text("action_do").notNull(),
+  actionDont: text("action_dont").notNull(),
+  sourceName: text("source_name").notNull(),
+  sourceUrl: text("source_url").notNull(),
+  distributorName: text("distributor_name").notNull().default(""),
+  arn: text("arn").notNull().default(""),
+  euin: text("euin").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  disclaimer: text("disclaimer").notNull(),
+  brandColor: text("brand_color").notNull().default("#d0aa65"),
+  imageKey: text("image_key").notNull(),
+  createdAt: integer("created_at").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  revokedAt: integer("revoked_at"),
+  views: integer("views").notNull().default(0),
+  sourceClicks: integer("source_clicks").notNull().default(0),
+  contactClicks: integer("contact_clicks").notNull().default(0),
+});

@@ -1,40 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { trustedPublisherUrl } from "../../../lib/trusted-publishers";
 
 export const dynamic = "force-dynamic";
-
-const allowedDomains = [
-  "indiatimes.com",
-  "sebi.gov.in",
-  "rbi.org.in",
-  "amfiindia.com",
-  "irdai.gov.in",
-  "pfrda.org.in",
-  "bbc.com",
-  "bbc.co.uk",
-  "thehindu.com",
-  "indianexpress.com",
-  "nytimes.com",
-  "federalreserve.gov",
-  "sec.gov",
-  "npr.org",
-  "cnbc.com",
-  "nasa.gov",
-];
 
 const cacheHeaders = {
   "Cache-Control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
 };
-
-function allowedUrl(value: string | URL) {
-  try {
-    const url = value instanceof URL ? value : new URL(value);
-    const host = url.hostname.toLowerCase();
-    return url.protocol === "https:" && !url.username && !url.password && (!url.port || url.port === "443")
-      && allowedDomains.some((domain) => host === domain || host.endsWith(`.${domain}`));
-  } catch {
-    return false;
-  }
-}
 
 function decodeEntities(value: string) {
   const named: Record<string, string> = { amp: "&", quot: "\"", apos: "'", lt: "<", gt: ">", nbsp: " " };
@@ -136,7 +107,7 @@ async function readBounded(response: Response, maximumBytes = 1_500_000) {
 async function fetchPublisherPage(initialUrl: URL) {
   let current = initialUrl;
   for (let hop = 0; hop < 3; hop += 1) {
-    if (!allowedUrl(current)) throw new Error("Publisher URL is not approved");
+    if (!trustedPublisherUrl(current)) throw new Error("Publisher URL is not approved");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4500);
     try {
@@ -165,7 +136,7 @@ async function fetchPublisherPage(initialUrl: URL) {
 
 export async function GET(request: NextRequest) {
   const source = request.nextUrl.searchParams.get("url") || "";
-  if (!allowedUrl(source)) return NextResponse.json({ context: "", method: "unavailable" }, { status: 400, headers: cacheHeaders });
+  if (!trustedPublisherUrl(source)) return NextResponse.json({ context: "", method: "unavailable" }, { status: 400, headers: cacheHeaders });
   try {
     const html = await fetchPublisherPage(new URL(source));
     const article = jsonLdText(html);

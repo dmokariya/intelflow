@@ -1,0 +1,23 @@
+CREATE TABLE `shares` (
+	`id` text PRIMARY KEY NOT NULL,
+	`owner_token_hash` text NOT NULL,
+	`story_title` text NOT NULL,
+	`story_context` text NOT NULL,
+	`action_do` text NOT NULL,
+	`action_dont` text NOT NULL,
+	`source_name` text NOT NULL,
+	`source_url` text NOT NULL,
+	`distributor_name` text DEFAULT '' NOT NULL,
+	`arn` text DEFAULT '' NOT NULL,
+	`euin` text DEFAULT '' NOT NULL,
+	`phone` text DEFAULT '' NOT NULL,
+	`disclaimer` text NOT NULL,
+	`brand_color` text DEFAULT '#d0aa65' NOT NULL,
+	`image_key` text NOT NULL,
+	`created_at` integer NOT NULL,
+	`expires_at` integer NOT NULL,
+	`revoked_at` integer,
+	`views` integer DEFAULT 0 NOT NULL,
+	`source_clicks` integer DEFAULT 0 NOT NULL,
+	`contact_clicks` integer DEFAULT 0 NOT NULL
+);
