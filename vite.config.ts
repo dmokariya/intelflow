@@ -3,10 +3,7 @@ import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
 
-const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
-  "00000000-0000-4000-8000-000000000000";
-
-const { d1, r2 } = hostingConfig;
+const { d1 } = hostingConfig;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -18,23 +15,22 @@ const localBindingConfig = {
     { pattern: "intelflow.in", custom_domain: true },
     { pattern: "www.intelflow.in", custom_domain: true },
   ],
+  kv_namespaces: [
+    {
+      binding: "SHARE_IMAGES",
+      id: "e3e145603b2d4d5f8ed47468bb0573f2",
+    },
+  ],
   d1_databases: d1
     ? [
         {
           binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_name: "intelflow-shares",
+          database_id: "d84005cb-269d-417a-a2d0-2afffb76101b",
         },
       ]
     : [],
-  r2_buckets: r2
-    ? [
-        {
-          binding: r2,
-          bucket_name: "site-creator-r2",
-        },
-      ]
-    : [],
+  r2_buckets: [],
 };
 
 export default defineConfig(async () => {
