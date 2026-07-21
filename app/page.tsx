@@ -221,6 +221,9 @@ export default function Home() {
   const [explainStory, setExplainStory] = useState<Story | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
+  const [activeSources, setActiveSources] = useState(0);
+  const [sourceCount, setSourceCount] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(20);
 
   useEffect(() => {
     setOnboarded(storage.get("intelflow:onboarded", false));
@@ -237,6 +240,8 @@ export default function Home() {
       setPage(nextPage);
       setProTab(nextTab);
       setActiveTag(parameters.get("topic") || "For you");
+      const requestedLimit = Number(parameters.get("limit") || 20);
+      setVisibleCount(Number.isFinite(requestedLimit) ? Math.max(20, Math.min(80, requestedLimit)) : 20);
       setMode(nextPage === "pro" ? "distributor" : "reader");
     };
     applyUrlState();
@@ -260,9 +265,11 @@ export default function Home() {
     setRefreshing(true);
     fetch(`/api/feed${force ? `?refresh=${Date.now()}` : ""}`, { cache: force ? "no-store" : "default" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Feed unavailable")))
-      .then((data: { stories?: Story[]; generatedAt?: string }) => {
+      .then((data: { stories?: Story[]; generatedAt?: string; activeSources?: number; sources?: number }) => {
         if (data.stories?.length) setFeedStories(data.stories);
         if (data.generatedAt) setLastUpdated(new Date(data.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+        if (typeof data.activeSources === "number") setActiveSources(data.activeSources);
+        if (typeof data.sources === "number") setSourceCount(data.sources);
       })
       .catch(() => undefined)
       .finally(() => setRefreshing(false));
@@ -304,6 +311,7 @@ export default function Home() {
   function writeAppUrl(nextPage: AppPage, options: { tab?: ProTab; story?: Story | null; topic?: string } = {}) {
     const url = new URL(window.location.href);
     url.searchParams.set("view", nextPage);
+    url.searchParams.delete("limit");
     if (nextPage === "pro") {
       url.searchParams.set("tab", options.tab || proTab);
       if (options.story) url.searchParams.set("story", String(options.story.id));
@@ -321,6 +329,7 @@ export default function Home() {
 
   function navigate(next: AppPage) {
     setPage(next);
+    setVisibleCount(20);
     setMenuOpen(false);
     const nextMode = next === "pro" ? "distributor" : "reader";
     setMode(nextMode);
@@ -341,7 +350,18 @@ export default function Home() {
   function chooseTopic(topic: string) {
     setActiveTag(topic);
     setPage("feed");
+    setVisibleCount(20);
     writeAppUrl("feed", { topic });
+  }
+
+  function showMoreStories() {
+    const nextCount = Math.min(80, visibleCount + 20);
+    setVisibleCount(nextCount);
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", page);
+    url.searchParams.set("limit", String(nextCount));
+    window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    trackEvent("feed_more_loaded", { visible_count: nextCount, topic: activeTag });
   }
 
   function switchMode(next: "reader" | "distributor") {
@@ -424,7 +444,7 @@ export default function Home() {
             <div>
               <span className="date-label">LIVE · INDIA + UNITED STATES</span>
               <h1>Good afternoon.</h1>
-              <p>{visibleStories.length} signals selected for your interests{lastUpdated ? ` · Updated ${lastUpdated}` : ""}.</p>
+              <p>{visibleStories.length} signals selected for your interests{lastUpdated ? ` · Updated ${lastUpdated}` : ""}{sourceCount ? ` · ${activeSources}/${sourceCount} sources live` : ""}.</p>
             </div>
             <button className={`refresh-feed ${refreshing ? "refreshing" : ""}`} onClick={() => loadFeed(true)} disabled={refreshing}><span>↻</span>{refreshing ? "Updating" : "Refresh"}</button>
           </section>
@@ -465,8 +485,9 @@ export default function Home() {
               <button onClick={() => navigate("feed")}>Return to briefing</button>
             </div>
           ) : (
+            <>
             <div className="story-stream">
-              {visibleStories.slice(0, 20).map((story, index) => (
+              {visibleStories.slice(0, visibleCount).map((story, index) => (
                 <article className={`story-card ${index === 0 ? "lead-story" : ""}`} key={story.id} style={{ "--story-color": topicColor(story.tags[0]), borderTopColor: topicColor(story.tags[0]) } as CSSProperties}>
                   <div className="story-image-wrap">
                     <img src={story.image} alt="" className="story-image" loading={index > 2 ? "lazy" : "eager"} />
@@ -498,6 +519,8 @@ export default function Home() {
                 </article>
               ))}
             </div>
+            {visibleStories.length > visibleCount && <button className="feed-load-more" onClick={showMoreStories}>Load 20 more signals <span>{visibleCount} of {visibleStories.length}</span></button>}
+            </>
           )}
           <p className="automated-note">Briefs are automatically condensed from attributed sources. Verify important information with the original publisher.</p>
         </section>
@@ -541,6 +564,29 @@ function Discover({ selected, setSelected }: { selected: string[]; setSelected: 
   );
 }
 
+function selectMorningFive(stories: Story[]) {
+  const selected: Story[] = [];
+  const used = new Set<number>();
+  const lanes = [
+    (story: Story) => story.tags.includes("Regulation"),
+    (story: Story) => story.tags.includes("Personal Finance"),
+    (story: Story) => story.tags.includes("India") && story.tags.some((tag) => ["Markets", "Business", "Economy"].includes(tag)),
+    (story: Story) => story.tags.includes("US") && story.tags.some((tag) => ["Markets", "Business", "Economy"].includes(tag)),
+    (story: Story) => story.tags.some((tag) => ["Economy", "Business"].includes(tag)),
+  ];
+  lanes.forEach((matches) => {
+    const story = stories.find((candidate) => !used.has(candidate.id) && matches(candidate));
+    if (story) { selected.push(story); used.add(story.id); }
+  });
+  stories.forEach((story) => {
+    if (selected.length < 5 && !used.has(story.id) && story.tags.some((tag) => ["Markets", "Regulation", "Personal Finance", "US", "Economy", "Business"].includes(tag))) {
+      selected.push(story);
+      used.add(story.id);
+    }
+  });
+  return selected.slice(0, 5);
+}
+
 function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initialStory, tab, navigateTab }: {
   stories: Story[];
   isPro: boolean;
@@ -559,7 +605,7 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   const [draft, setDraft] = useState("");
   const todayKey = new Date().toISOString().slice(0, 10);
   const [completedActions, setCompletedActions] = useState<string[]>(() => storage.get(`intelflow:pro-actions:${todayKey}`, []));
-  const morningFive = stories.filter((story) => story.tags.some((tag) => ["Markets", "Business", "India"].includes(tag))).slice(0, 5);
+  const morningFive = selectMorningFive(stories);
   const practiceStories = stories.filter((story) => story.tags.some((tag) => ["Markets", "Regulation", "Personal Finance", "US", "Economy"].includes(tag))).slice(0, 6);
   const dailyActions = ["Read the Morning 5", "Check official regulator updates", "Prepare one neutral client note", "Review pending follow-ups"];
   const quickMessages = [
