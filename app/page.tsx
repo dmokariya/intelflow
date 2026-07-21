@@ -621,11 +621,19 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   const [copied, setCopied] = useState(false);
   const [copiedTool, setCopiedTool] = useState("");
   const [draft, setDraft] = useState("");
+  const contextCache = useRef(new Map<string, string>());
+  const [articleContext, setArticleContext] = useState<{ storyId: number; text: string; status: "loading" | "article" | "fallback" }>({
+    storyId: initialStory?.id || 0,
+    text: initialStory ? shortStoryContext(initialStory) : "",
+    status: "fallback",
+  });
   const todayKey = new Date().toISOString().slice(0, 10);
   const [completedActions, setCompletedActions] = useState<string[]>(() => storage.get(`intelflow:pro-actions:${todayKey}`, []));
   const morningFive = selectMorningFive(stories);
   const practiceStories = stories.filter((story) => story.tags.some((tag) => ["Markets", "Regulation", "Personal Finance", "US", "Economy"].includes(tag))).slice(0, 6);
   const activeStudioStory = studioStory || stories[0] || demoStories[0];
+  const resolvedArticleContext = articleContext.storyId === activeStudioStory.id ? articleContext.text : shortStoryContext(activeStudioStory);
+  const articleContextStatus = articleContext.storyId === activeStudioStory.id ? articleContext.status : "loading";
   const studioStoryOptions = [activeStudioStory, ...stories.filter((story) => story.id !== activeStudioStory.id)].slice(0, 40);
   const trialStatus = getTrialStatus(trial);
   const trialProgress = trialStatus.locked ? "Trial complete" : [trialStatus.daysRemaining ? `${trialStatus.daysRemaining} day${trialStatus.daysRemaining === 1 ? "" : "s"} left` : "Time requirement complete", trialStatus.actionsRemaining ? `${trialStatus.actionsRemaining} output${trialStatus.actionsRemaining === 1 ? "" : "s"} left` : "Output allowance used"].join(" · ");
@@ -646,6 +654,35 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   useEffect(() => {
     if (initialStory) setStudioStory(initialStory);
   }, [initialStory]);
+
+  useEffect(() => {
+    if (tab !== "studio") return;
+    const fallback = shortStoryContext(activeStudioStory);
+    const cached = contextCache.current.get(activeStudioStory.sourceUrl);
+    if (cached) {
+      setArticleContext({ storyId: activeStudioStory.id, text: cached, status: "article" });
+      return;
+    }
+    setArticleContext({ storyId: activeStudioStory.id, text: fallback, status: "loading" });
+    const controller = new AbortController();
+    void fetch(`/api/article-context?url=${encodeURIComponent(activeStudioStory.sourceUrl)}`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<{ context?: string; method?: string }> : { context: "", method: "unavailable" })
+      .then((result) => {
+        const text = result.context?.trim();
+        if (text) {
+          contextCache.current.set(activeStudioStory.sourceUrl, text);
+          setArticleContext({ storyId: activeStudioStory.id, text, status: "article" });
+          trackEvent("article_context_loaded", { item_id: String(activeStudioStory.id), method: result.method || "article" });
+        } else {
+          setArticleContext({ storyId: activeStudioStory.id, text: fallback, status: "fallback" });
+        }
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setArticleContext({ storyId: activeStudioStory.id, text: fallback, status: "fallback" });
+      });
+    return () => controller.abort();
+  }, [tab, activeStudioStory]);
 
   function startTrial() {
     const nextTrial = trial || { startedAt: Date.now(), actions: 0 };
@@ -677,8 +714,8 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   }
 
   useEffect(() => {
-    setDraft(buildClientNote(activeStudioStory, profile));
-  }, [activeStudioStory, profile]);
+    setDraft(buildClientNote(activeStudioStory, profile, resolvedArticleContext));
+  }, [activeStudioStory, profile, resolvedArticleContext]);
 
   async function copyNote() {
     if (!allowOutput()) return;
@@ -815,14 +852,14 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
         {tool === "note" ? <div className="content-note-workspace">
           <aside className="content-story-brief">
             <div className="content-story-image"><img src={activeStudioStory.image} alt="" /><span>{activeStudioStory.tags.slice(0, 2).join(" · ")}</span></div>
-            <div><small>{activeStudioStory.source} · {activeStudioStory.age}</small><h3>{activeStudioStory.title}</h3><p>{shortStoryContext(activeStudioStory)}</p><a href={activeStudioStory.sourceUrl} target="_blank" rel="noreferrer">Verify original source ↗</a></div>
+            <div><small>{activeStudioStory.source} · {activeStudioStory.age}</small><h3>{activeStudioStory.title}</h3><p>{resolvedArticleContext}</p><small className={`context-origin ${articleContextStatus}`}>{articleContextStatus === "loading" ? "Checking original article…" : articleContextStatus === "article" ? "Context checked against original article" : "Using publisher feed excerpt"}</small><a href={activeStudioStory.sourceUrl} target="_blank" rel="noreferrer">Verify original source ↗</a></div>
           </aside>
           <div className="content-note-compose">
             <div className="content-note-head"><div><span className="pro-kicker">SHORT · ATTRIBUTED · NEUTRAL</span><h3>Editable client note</h3></div><button className="copy-note" disabled={trialStatus.locked} onClick={() => void copyNote()}>{trialStatus.locked ? "Trial complete" : copied ? "Copied ✓" : "Copy note"}</button></div>
             <textarea className="editable-note" aria-label="Editable client message" value={draft} onChange={(event) => setDraft(event.target.value)} />
             <p className="compliance-note"><strong>Before sending:</strong> review accuracy, suitability, source context and your organisation’s compliance policy. IntelFlow does not approve communications or provide investment advice.</p>
           </div>
-        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} embedded trialLocked={trialStatus.locked} onTrialAction={recordTrialAction} onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
+        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} initialContext={resolvedArticleContext} embedded trialLocked={trialStatus.locked} onTrialAction={recordTrialAction} onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
       </section>}
 
       {tab === "regulators" && <section className="regulator-page regulator-watch">
@@ -847,11 +884,12 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 type SocialFormat = "square" | "portrait";
 type SocialTemplate = "signal" | "market" | "regulatory";
 
-function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStoryChange, onTrialAction, trialLocked = false, embedded = false }: {
+function SocialPostStudio({ stories, profile, saveProfile, initialStory, initialContext, onStoryChange, onTrialAction, trialLocked = false, embedded = false }: {
   stories: Story[];
   profile: DistributorProfile;
   saveProfile: (next: DistributorProfile) => void;
   initialStory: Story | null;
+  initialContext: string;
   onStoryChange: (story: Story) => void;
   onTrialAction: (action: string) => void;
   trialLocked?: boolean;
@@ -870,8 +908,11 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStory
     if (!initialStory) return;
     setStory(initialStory);
     setHeadline(initialStory.title);
-    setContext(shortStoryContext(initialStory));
   }, [initialStory]);
+
+  useEffect(() => {
+    setContext(initialContext || shortStoryContext(story));
+  }, [initialContext, story]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -902,7 +943,8 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStory
 
   function buildCaption() {
     const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
-    return `${headline}\n\n${context}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. No buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
+    const guidance = clientActionGuidance(story);
+    return `${headline}\n\n${context}\n\nDo: ${guidance.do}\nDon't: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. No buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
   }
 
   async function makeBlob() {
@@ -1034,6 +1076,7 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   const context = canvas.getContext("2d");
   if (!context) return;
   const accent = profile.brandColor || "#d0aa65";
+  const guidance = clientActionGuidance(story);
   const backgrounds: Record<SocialTemplate, [string, string]> = { signal: ["#08121a", "#112839"], market: ["#071a18", "#12352e"], regulatory: ["#15101b", "#302037"] };
   const [start, end] = backgrounds[template];
   const gradient = context.createLinearGradient(0, 0, width, height);
@@ -1097,25 +1140,33 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   cursor += 28;
   context.fillStyle = "#aebbc1";
   context.font = "400 29px Arial, sans-serif";
-  wrapCanvasText(context, summary, margin, cursor, width - margin * 2, 42, format === "portrait" ? 4 : 3);
+  wrapCanvasText(context, summary, margin, cursor, width - margin * 2, 42, format === "portrait" ? 4 : 2);
 
-  const sourceY = height - 275;
+  const sourceY = height - 340;
   context.fillStyle = "rgba(7,15,20,.72)";
-  context.roundRect(margin, sourceY, width - margin * 2, 150, 18);
+  context.roundRect(margin, sourceY, width - margin * 2, 215, 18);
   context.fill();
   context.fillStyle = accent;
   context.font = "700 16px Arial, sans-serif";
-  context.fillText("SOURCE", margin + 24, sourceY + 35);
+  context.fillText("CLIENT TAKEAWAY", margin + 24, sourceY + 34);
+  context.font = "700 15px Arial, sans-serif";
+  context.fillText("DO", margin + 24, sourceY + 70);
   context.fillStyle = "#eef2f3";
-  context.font = "600 22px Arial, sans-serif";
-  context.fillText(story.source.slice(0, 62), margin + 24, sourceY + 70);
+  context.font = "400 16px Arial, sans-serif";
+  wrapCanvasText(context, guidance.do, margin + 70, sourceY + 70, width - margin * 2 - 100, 20, 1);
+  context.fillStyle = "#d8a879";
+  context.font = "700 15px Arial, sans-serif";
+  context.fillText("DON'T", margin + 24, sourceY + 105);
+  context.fillStyle = "#eef2f3";
+  context.font = "400 16px Arial, sans-serif";
+  wrapCanvasText(context, guidance.dont, margin + 90, sourceY + 105, width - margin * 2 - 120, 20, 1);
   context.fillStyle = "#9ba8ae";
-  context.font = "400 15px Arial, sans-serif";
-  context.fillText("One headline alone does not require an immediate portfolio change.", margin + 24, sourceY + 96);
+  context.font = "600 14px Arial, sans-serif";
+  context.fillText(`Source: ${story.source.slice(0, 62)}`, margin + 24, sourceY + 144);
   const disclaimer = profile.disclaimer.length > 112 ? `${profile.disclaimer.slice(0, 109).trimEnd()}…` : profile.disclaimer;
   context.fillStyle = "#788990";
   context.font = "400 13px Arial, sans-serif";
-  context.fillText(disclaimer, margin + 24, sourceY + 124);
+  context.fillText(disclaimer, margin + 24, sourceY + 181);
 
   context.strokeStyle = accent;
   context.globalAlpha = .65;
@@ -1132,11 +1183,18 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   context.textAlign = "left";
 }
 
-function buildClientNote(story: Story, profile: DistributorProfile) {
+function clientActionGuidance(story: Story) {
+  if (story.tags.includes("Regulation")) return { do: "Verify the official circular, effective date and who is affected.", dont: "Treat the headline as final compliance guidance." };
+  if (story.tags.includes("Personal Finance")) return { do: "Relate the update to the client's goals, horizon and liquidity needs.", dont: "Turn the headline into a product recommendation." };
+  if (story.tags.includes("US")) return { do: "Explain the possible India link through rates, currency or sentiment.", dont: "Assume the headline has a direct portfolio impact." };
+  if (story.tags.includes("Markets") || story.tags.includes("Economy")) return { do: "Use this as context and review it against the client's existing plan.", dont: "Suggest an immediate portfolio change from one headline." };
+  return { do: "Verify the source and explain the wider context calmly.", dont: "Present one headline as a reason for immediate action." };
+}
+
+function buildClientNote(story: Story, profile: DistributorProfile, context: string) {
   const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
-  const firstSentence = story.summary.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || story.summary;
-  const shortContext = firstSentence.length > 180 ? `${firstSentence.slice(0, 177).trimEnd()}…` : firstSentence;
-  return `Hello,\n\n${story.title}\n\nIn short: ${shortContext}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nNo buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nDisclaimer: ${profile.disclaimer}`;
+  const guidance = clientActionGuidance(story);
+  return `Hello,\n\n${story.title}\n\nIn short: ${context}\n\nWhat to do: ${guidance.do}\nWhat not to do: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nNo buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nDisclaimer: ${profile.disclaimer}`;
 }
 
 function conversationCue(story: Story) {
