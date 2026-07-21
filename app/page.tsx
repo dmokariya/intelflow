@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, FormEvent } from "react";
 
 declare global {
   interface Window {
@@ -61,6 +61,29 @@ type CompanyImpact = {
   posture: "Watchlist" | "Wait for proof" | "Re-underwrite";
 };
 type ManualCompanyLinks = Record<string, string[]>;
+type RegulatorUpdate = {
+  id: string;
+  authority: "SEBI" | "AMFI" | "RBI" | "IRDAI" | "PFRDA";
+  title: string;
+  url: string;
+  publishedAt: string;
+  documentType: "PDF" | "Official page";
+  category: string;
+  audience: string;
+  brief: string;
+};
+type RegulatorHealth = { authority: RegulatorUpdate["authority"]; status: string; count: number; responseMs: number; url: string };
+type DocumentBrief = {
+  method: string;
+  extractionStatus: string;
+  category: string;
+  affectedAudience: string[];
+  effectiveDate: string;
+  keyPoints: string[];
+  action: string;
+  disclaimer: string;
+  error?: string;
+};
 const trialDays = 7;
 const trialActions = 10;
 const trialStorageKey = "intelflow:pro-trial";
@@ -609,6 +632,7 @@ export default function Home() {
         <Brand />
         <span className="distributor-badge">BUILT FOR DISTRIBUTORS</span>
         <div className="top-actions">
+          <a className="support-link" href="/contact">Contact</a>
           <button className="avatar-button" aria-label="Open account and site menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>{profile.name?.trim().charAt(0).toUpperCase() || "IF"}</button>
         </div>
         {menuOpen && (
@@ -800,6 +824,9 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   const [shareExpiry, setShareExpiry] = useState(30);
   const [noteShareStatus, setNoteShareStatus] = useState("");
   const [includeCompanyImpact, setIncludeCompanyImpact] = useState(false);
+  const [regulatorUpdates, setRegulatorUpdates] = useState<RegulatorUpdate[]>([]);
+  const [regulatorHealth, setRegulatorHealth] = useState<RegulatorHealth[]>([]);
+  const [regulatorLoading, setRegulatorLoading] = useState(true);
   const [attachStoryId, setAttachStoryId] = useState(String(stories[0]?.id || ""));
   const [attachTicker, setAttachTicker] = useState(companyUniverse[0].ticker);
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -832,17 +859,25 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
     })
     .slice(0, 6);
   const trialProgress = trialStatus.locked ? "Trial complete" : [trialStatus.daysRemaining ? `${trialStatus.daysRemaining} day${trialStatus.daysRemaining === 1 ? "" : "s"} left` : "Time requirement complete", trialStatus.actionsRemaining ? `${trialStatus.actionsRemaining} output${trialStatus.actionsRemaining === 1 ? "" : "s"} left` : "Output allowance used"].join(" · ");
-  const regulatorAlerts = [
-    { authority: "SEBI", title: "Review new circulars before client communication", time: "Watchlist · Today", level: "Action" },
-    { authority: "AMFI", title: "Distributor guidance and operational updates", time: "Watchlist · Daily", level: "Monitor" },
-    { authority: "RBI", title: "Policy and liquidity announcements", time: "Watchlist · This week", level: "Context" },
-    { authority: "IRDAI", title: "Insurance regulations and consumer-protection updates", time: "Watchlist · Daily", level: "Monitor" },
-    { authority: "PFRDA", title: "Pension and NPS circulars and notices", time: "Watchlist · Daily", level: "Monitor" },
-  ];
-
   useEffect(() => {
     if (initialStory) setStudioStory(initialStory);
   }, [initialStory]);
+
+  function loadRegulators(force = false) {
+    setRegulatorLoading(true);
+    void fetch(`/api/regulators${force ? `?refresh=${Date.now()}` : ""}`, { cache: force ? "no-store" : "default" })
+      .then((response) => response.ok ? response.json() as Promise<{ updates?: RegulatorUpdate[]; sourceHealth?: RegulatorHealth[] }> : Promise.reject(new Error("Official inbox unavailable")))
+      .then((result) => {
+        setRegulatorUpdates(result.updates || []);
+        setRegulatorHealth(result.sourceHealth || []);
+      })
+      .catch(() => undefined)
+      .finally(() => setRegulatorLoading(false));
+  }
+
+  useEffect(() => {
+    loadRegulators();
+  }, []);
 
   useEffect(() => {
     if (tab !== "studio") return;
@@ -1011,6 +1046,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
           <header><div><span className="pro-kicker">TODAY’S DISTRIBUTOR ACTIONS</span><h2>Action checklist</h2><p>Four core actions plus checks triggered by today’s live news. Completion stays only on this browser.</p></div><div><strong>{completedDeskActions.filter((id) => dailyDeskActions.some((action) => action.id === id)).length}/{dailyDeskActions.length}</strong><span>{dailyDeskActions.filter((action) => action.newsTriggered).length} news-triggered</span></div></header>
           <div>{dailyDeskActions.map((action) => <button type="button" key={action.id} className={`${completedDeskActions.includes(action.id) ? "done" : ""} ${action.newsTriggered ? "news-triggered" : ""}`} onClick={() => toggleDeskAction(action.id)}><i>{completedDeskActions.includes(action.id) ? "✓" : ""}</i><span><strong>{action.title}</strong><small>{action.reason}</small></span>{action.newsTriggered && <b>FROM TODAY’S NEWS</b>}</button>)}</div>
         </section>
+        <DailyClientDigest stories={morningFive.length ? morningFive : stories.slice(0, 5)} updates={regulatorUpdates} profile={profile} locked={trialStatus.locked} onOutput={recordTrialAction} />
         <section className="company-impact-hub" id="company-impact">
           <header className="impact-hub-hero"><div><span className="pro-kicker">NEW · NEWS-TO-COMPANY RESEARCH</span><h2>Company Impact</h2><p>Understand why a headline may matter, what financial variable to inspect and what still needs proof. These are research prompts—not buy, sell or hold recommendations.</p></div><div><strong>{impactQueue.length}</strong><span>live connections</span><small>{companyWatchlist.length} companies watched locally</small></div></header>
           <div className="impact-attach-bar">
@@ -1092,10 +1128,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
       </section>}
 
       {tab === "regulators" && <section className="regulator-page regulator-watch">
-        <div className="pro-section-title"><div><span>OFFICIAL UPDATES</span><h2>Regulator Watch</h2></div></div>
-        <p className="watch-disclaimer">Use these links to verify current circulars and notices directly with each official body. IntelFlow does not interpret these updates as legal or compliance advice.</p>
-        {regulatorAlerts.map((alert) => <article key={alert.authority}><span>{alert.authority}</span><strong>{alert.title}</strong><small>{alert.time}</small><i>{alert.level}</i></article>)}
-        <OfficialRegulatorLinks />
+        <RegulatorInbox updates={regulatorUpdates} health={regulatorHealth} loading={regulatorLoading} onRefresh={() => loadRegulators(true)} onShare={(story) => openSocialCard(story, "regulator_inbox")} />
       </section>}
 
       {tab === "profile" && <form className="profile-editor" onSubmit={(event) => event.preventDefault()}>
@@ -1111,7 +1144,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 }
 
 type SocialFormat = "square" | "portrait";
-type SocialTemplate = "signal" | "market" | "regulatory";
+type SocialTemplate = "signal" | "market" | "regulatory" | "festival";
 
 function SocialPostStudio({ stories, profile, saveProfile, initialStory, initialContext, impact, onStoryChange, onTrialAction, onShareCreated, trialLocked = false, embedded = false }: {
   stories: Story[];
@@ -1159,6 +1192,22 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
     onStoryChange(next);
   }
 
+  function applyCommunityPreset(preset: "update" | "festival") {
+    if (preset === "festival") {
+      setTemplate("festival");
+      setHeadline(`Warm wishes from ${profile.name || "IntelFlow"}`);
+      setContext("Wishing you and your family happiness, good health and prosperity. Thank you for being part of our community.");
+      setStatus("Festive greeting ready—edit the message and branding before sharing.");
+      trackEvent("community_pack_preset", { preset: "festival" });
+      return;
+    }
+    setTemplate(story.tags.includes("Regulation") ? "regulatory" : story.tags.includes("Markets") ? "market" : "signal");
+    setHeadline(story.title);
+    setContext(initialContext || shortStoryContext(story));
+    setStatus("News update restored from the selected headline.");
+    trackEvent("community_pack_preset", { preset: "news_update" });
+  }
+
   function uploadLogo(file?: File) {
     if (!file) return;
     if (!file.type.startsWith("image/") || file.size > 1_000_000) {
@@ -1175,6 +1224,7 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
 
   function buildCaption() {
     const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
+    if (template === "festival") return `${headline}\n\n${context}${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
     const guidance = clientActionGuidance(story);
     const marketReadThrough = impact ? `\n\nCompany Impact: ${impactSummary(impact)}\nResearch posture: ${impact.posture}. Verify: ${impact.verify}` : "";
     return `${headline}\n\n${context}${marketReadThrough}\n\nWhat you can do: ${guidance.do}\nWhat to avoid: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. No buy/sell view or research recommendation. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
@@ -1241,8 +1291,9 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
     try {
       const blob = await makeBlob();
       if (!blob) throw new Error("Preview image could not be created.");
-      const shareContext = impact ? `${context} Market read-through: ${impactSummary(impact)}` : context;
-      const share = await publishHostedShare({ ...story, title: headline }, shareContext, profile, blob, shareExpiry);
+      const shareContext = impact && template !== "festival" ? `${context} Market read-through: ${impactSummary(impact)}` : context;
+      const publishedStory = template === "festival" ? { ...story, title: headline, source: "IntelFlow Community Pack", sourceUrl: "https://intelflow.in", tags: ["Community"] } : { ...story, title: headline };
+      const share = await publishHostedShare(publishedStory, shareContext, profile, blob, shareExpiry);
       onShareCreated(share);
       onTrialAction("share_link_created");
       trackEvent("share_link_created", { item_id: String(story.id), expires_in_days: shareExpiry, format: "social" });
@@ -1257,7 +1308,8 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
     <div className="studio-layout">
       <div className="studio-controls">
         {!embedded && <label>Story<select value={story.id} onChange={(event) => { const next = stories.find((item) => String(item.id) === event.target.value); if (next) chooseStory(next); }}>{stories.slice(0, 20).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}
-        <fieldset><legend>Template</legend><div className="studio-options">{(["signal", "market", "regulatory"] as SocialTemplate[]).map((item) => <button type="button" key={item} className={template === item ? "active" : ""} onClick={() => setTemplate(item)}>{item === "signal" ? "Daily signal" : item === "market" ? "Market brief" : "Regulatory"}</button>)}</div></fieldset>
+        <div className="community-pack"><span>COMMUNITY PACK</span><strong>Post something useful in two clicks.</strong><p>Use today’s selected update or create an editable festive greeting with your local branding.</p><div><button type="button" onClick={() => applyCommunityPreset("update")}>News update</button><button type="button" onClick={() => applyCommunityPreset("festival")}>Festive greeting</button></div></div>
+        <fieldset><legend>Template</legend><div className="studio-options">{(["signal", "market", "regulatory", "festival"] as SocialTemplate[]).map((item) => <button type="button" key={item} className={template === item ? "active" : ""} onClick={() => setTemplate(item)}>{item === "signal" ? "Daily signal" : item === "market" ? "Market brief" : item === "regulatory" ? "Regulatory" : "Greeting"}</button>)}</div></fieldset>
         <fieldset><legend>Format</legend><div className="studio-options"><button type="button" className={format === "square" ? "active" : ""} onClick={() => setFormat("square")}>Square · 1080</button><button type="button" className={format === "portrait" ? "active" : ""} onClick={() => setFormat("portrait")}>Portrait · 1350</button></div></fieldset>
         <label>Headline<textarea value={headline} maxLength={130} rows={3} onChange={(event) => setHeadline(event.target.value)} /></label>
         <label>Short context<textarea value={context} maxLength={220} rows={4} onChange={(event) => setContext(event.target.value)} /></label>
@@ -1266,7 +1318,7 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
       <div className="studio-preview">
         <div className={`canvas-frame ${format}`}><canvas ref={canvasRef} aria-label="Generated social post preview" /></div>
         <div className="studio-actions"><button type="button" disabled={trialLocked} onClick={() => void generateCard()}>{trialLocked ? "Trial complete" : "Generate card"}</button><button type="button" className="primary" disabled={trialLocked} onClick={() => void shareCard()}>Share image</button><button type="button" disabled={trialLocked} onClick={() => void downloadCard()}>Download PNG</button><button type="button" disabled={trialLocked} onClick={() => void copyCaption()}>Copy caption</button></div>
-        <div className="social-link-publisher"><label>Link expires<select value={shareExpiry} onChange={(event) => setShareExpiry(Number(event.target.value))}><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></label><button type="button" disabled={trialLocked} onClick={() => void createHostedLink()}>{trialLocked ? "Trial complete" : "Create branded source link →"}</button></div>
+        <div className="social-link-publisher"><label>Link expires<select value={shareExpiry} onChange={(event) => setShareExpiry(Number(event.target.value))}><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></label><button type="button" disabled={trialLocked} onClick={() => void createHostedLink()}>{trialLocked ? "Trial complete" : "Create short share link →"}</button></div>
         {status && <p className="studio-status" role="status">{status}</p>}
         <p className="studio-disclaimer">Image sharing stays on this device. Creating a branded source link publishes the displayed profile identity, disclaimer and preview image until it expires or you revoke it.</p>
       </div>
@@ -1422,7 +1474,7 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   if (!context) return;
   const accent = profile.brandColor || "#d0aa65";
   const guidance = clientActionGuidance(story);
-  const backgrounds: Record<SocialTemplate, [string, string]> = { signal: ["#08121a", "#112839"], market: ["#071a18", "#12352e"], regulatory: ["#15101b", "#302037"] };
+  const backgrounds: Record<SocialTemplate, [string, string]> = { signal: ["#08121a", "#112839"], market: ["#071a18", "#12352e"], regulatory: ["#15101b", "#302037"], festival: ["#201512", "#58331f"] };
   const [start, end] = backgrounds[template];
   const gradient = context.createLinearGradient(0, 0, width, height);
   gradient.addColorStop(0, start);
@@ -1475,10 +1527,10 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   context.font = "700 15px Arial, sans-serif";
   context.fillText("DISTRIBUTOR INTELLIGENCE", margin + 112, 128);
 
-  const category = template === "regulatory" ? "REGULATORY WATCH" : template === "market" ? "MARKET CONTEXT" : "DAILY SIGNAL";
+  const category = template === "regulatory" ? "REGULATORY WATCH" : template === "market" ? "MARKET CONTEXT" : template === "festival" ? "COMMUNITY GREETING" : "DAILY SIGNAL";
   context.fillStyle = accent;
   context.font = "700 18px Arial, sans-serif";
-  context.fillText(`${category}  ·  ${story.tags.slice(0, 2).join(" + ").toUpperCase()}`, margin, 235);
+  context.fillText(template === "festival" ? category : `${category}  ·  ${story.tags.slice(0, 2).join(" + ").toUpperCase()}`, margin, 235);
   context.fillStyle = "#f5f6f3";
   context.font = `600 ${format === "portrait" ? 72 : 68}px Georgia, serif`;
   const headlineLines = impact ? (format === "portrait" ? 4 : 3) : (format === "portrait" ? 5 : 4);
@@ -1493,7 +1545,7 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   context.roundRect(margin, sourceY, width - margin * 2, 265, 18);
   context.fill();
   let panelY = sourceY + 34;
-  if (impact) {
+  if (impact && template !== "festival") {
     context.fillStyle = accent;
     context.font = "700 16px Arial, sans-serif";
     context.fillText("COMPANY IMPACT · RESEARCH CONTEXT", margin + 24, panelY);
@@ -1507,21 +1559,31 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   }
   context.fillStyle = accent;
   context.font = "700 16px Arial, sans-serif";
-  context.fillText("CLIENT ACTION PLAN", margin + 24, panelY);
-  context.font = "700 15px Arial, sans-serif";
-  context.fillText("DO", margin + 24, panelY + 34);
-  context.fillStyle = "#eef2f3";
-  context.font = "400 16px Arial, sans-serif";
-  wrapCanvasText(context, guidance.do, margin + 70, panelY + 34, width - margin * 2 - 100, 20, 1);
-  context.fillStyle = "#d8a879";
-  context.font = "700 15px Arial, sans-serif";
-  context.fillText("AVOID", margin + 24, panelY + 67);
-  context.fillStyle = "#eef2f3";
-  context.font = "400 16px Arial, sans-serif";
-  wrapCanvasText(context, guidance.dont, margin + 90, panelY + 67, width - margin * 2 - 120, 20, 1);
-  context.fillStyle = "#9ba8ae";
-  context.font = "600 14px Arial, sans-serif";
-  context.fillText(`Source: ${story.source.slice(0, 62)}`, margin + 24, sourceY + 221);
+  if (template === "festival") {
+    context.fillText("A NOTE FOR OUR COMMUNITY", margin + 24, panelY);
+    context.fillStyle = "#eef2f3";
+    context.font = "400 21px Georgia, serif";
+    wrapCanvasText(context, "Relationships grow through useful updates, steady guidance and thoughtful conversations.", margin + 24, panelY + 42, width - margin * 2 - 48, 28, 3);
+    context.fillStyle = "#9ba8ae";
+    context.font = "600 14px Arial, sans-serif";
+    context.fillText("Created locally with IntelFlow Community Pack", margin + 24, sourceY + 221);
+  } else {
+    context.fillText("CLIENT ACTION PLAN", margin + 24, panelY);
+    context.font = "700 15px Arial, sans-serif";
+    context.fillText("DO", margin + 24, panelY + 34);
+    context.fillStyle = "#eef2f3";
+    context.font = "400 16px Arial, sans-serif";
+    wrapCanvasText(context, guidance.do, margin + 70, panelY + 34, width - margin * 2 - 100, 20, 1);
+    context.fillStyle = "#d8a879";
+    context.font = "700 15px Arial, sans-serif";
+    context.fillText("AVOID", margin + 24, panelY + 67);
+    context.fillStyle = "#eef2f3";
+    context.font = "400 16px Arial, sans-serif";
+    wrapCanvasText(context, guidance.dont, margin + 90, panelY + 67, width - margin * 2 - 120, 20, 1);
+    context.fillStyle = "#9ba8ae";
+    context.font = "600 14px Arial, sans-serif";
+    context.fillText(`Source: ${story.source.slice(0, 62)}`, margin + 24, sourceY + 221);
+  }
   const disclaimer = profile.disclaimer.length > 112 ? `${profile.disclaimer.slice(0, 109).trimEnd()}…` : profile.disclaimer;
   context.fillStyle = "#788990";
   context.font = "400 13px Arial, sans-serif";
@@ -1538,7 +1600,7 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   context.textAlign = "right";
   context.fillStyle = "#91a0a8";
   context.font = "400 14px Arial, sans-serif";
-  context.fillText("For information only · Verify the original source", width - margin, height - 55);
+  context.fillText(template === "festival" ? "Created for community sharing" : "For information only · Verify the original source", width - margin, height - 55);
   context.textAlign = "left";
 }
 
@@ -1563,6 +1625,185 @@ function conversationCue(story: Story) {
   if (story.tags.includes("Personal Finance")) return "Connect the topic to goals, time horizon and liquidity needs instead of presenting a product answer.";
   if (story.tags.includes("Economy")) return "Separate the economic signal from the client decision; explain what changed and what has not.";
   return "Use this as context for a calm check-in, not as a reason to recommend an immediate change.";
+}
+
+function readableDate(value: string, fallback = "Date not extracted") {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : fallback;
+}
+
+function regulatorStory(update: RegulatorUpdate): Story {
+  const numericId = Math.abs([...update.id].reduce((hash, character) => ((hash << 5) - hash + character.charCodeAt(0)) | 0, 0));
+  return {
+    id: numericId,
+    title: update.title,
+    summary: update.brief,
+    source: `${update.authority} — Official update`,
+    sourceUrl: update.url,
+    age: readableDate(update.publishedAt, "Latest official listing"),
+    readTime: "1 min brief",
+    tags: ["Regulation", "India", update.category],
+    image: "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=1200&q=82",
+    accent: "#d0aa65",
+    coverage: 1,
+  };
+}
+
+function RegulatorInbox({ updates, health, loading, onRefresh, onShare }: { updates: RegulatorUpdate[]; health: RegulatorHealth[]; loading: boolean; onRefresh: () => void; onShare: (story: Story) => void }) {
+  const [filter, setFilter] = useState("All");
+  const [briefs, setBriefs] = useState<Record<string, DocumentBrief>>({});
+  const [briefLoading, setBriefLoading] = useState("");
+  const [reminderTitle, setReminderTitle] = useState("");
+  const [reminderDate, setReminderDate] = useState("");
+  const [reminders, setReminders] = useState<Array<{ id: string; title: string; date: string }>>(() => storage.get("intelflow:compliance-reminders", []));
+  const filters = ["All", "SEBI", "AMFI", "RBI", "IRDAI", "PFRDA", "Expense ratio / TER"];
+  const visible = updates.filter((update) => filter === "All" || update.authority === filter || update.category === filter).slice(0, 18);
+  const liveSources = health.filter((source) => source.status === "live").length;
+
+  async function scanDocument(update: RegulatorUpdate) {
+    if (briefs[update.id]) return setBriefs((current) => { const next = { ...current }; delete next[update.id]; return next; });
+    setBriefLoading(update.id);
+    try {
+      const response = await fetch(`/api/regulator-document?url=${encodeURIComponent(update.url)}&title=${encodeURIComponent(update.title)}`);
+      const result = await response.json() as DocumentBrief;
+      setBriefs((current) => ({ ...current, [update.id]: result }));
+      trackEvent("regulator_document_scanned", { authority: update.authority, method: result.method || "error", category: update.category });
+    } catch {
+      setBriefs((current) => ({ ...current, [update.id]: { method: "unavailable", extractionStatus: "Scan unavailable", category: update.category, affectedAudience: [], effectiveDate: "Not extracted", keyPoints: [], action: "Open and verify the official document.", disclaimer: "The document could not be scanned.", error: "The document could not be scanned." } }));
+    } finally {
+      setBriefLoading("");
+    }
+  }
+
+  function addReminder(event: FormEvent) {
+    event.preventDefault();
+    if (!reminderTitle.trim() || !reminderDate) return;
+    const next = [...reminders, { id: `${Date.now()}`, title: reminderTitle.trim(), date: reminderDate }].sort((a, b) => a.date.localeCompare(b.date));
+    setReminders(next);
+    storage.set("intelflow:compliance-reminders", next);
+    setReminderTitle("");
+    setReminderDate("");
+    trackEvent("compliance_reminder_added", { reminder_date: reminderDate });
+  }
+
+  function removeReminder(id: string) {
+    const next = reminders.filter((reminder) => reminder.id !== id);
+    setReminders(next);
+    storage.set("intelflow:compliance-reminders", next);
+  }
+
+  return <>
+    <header className="regulator-inbox-hero"><div><span className="pro-kicker">LIVE OFFICIAL INBOX</span><h2>Regulator Watch</h2><p>Latest machine-readable updates from official SEBI, AMFI, RBI, IRDAI and PFRDA sources, with transparent document scans.</p></div><div><strong>{updates.length}</strong><span>updates found</span><small>{liveSources}/{health.length || 5} sources live</small><button type="button" onClick={onRefresh} disabled={loading}>{loading ? "Checking…" : "Refresh inbox"}</button></div></header>
+    <p className="watch-disclaimer"><strong>Verify before acting.</strong> Briefs are automated text extraction, not legal or compliance advice. Tables, annexures and scanned PDF pages may be missed.</p>
+    <nav className="regulator-filters" aria-label="Filter regulator updates">{filters.map((item) => <button type="button" key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item}</button>)}</nav>
+    <div className="regulator-source-health">{health.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.authority} className={source.status === "live" ? "live" : "limited"}><i />{source.authority}<span>{source.status === "live" ? `${source.count} live` : source.status}</span></a>)}</div>
+    <div className="regulator-update-list">
+      {loading && !updates.length ? <p className="regulator-empty">Checking official sources…</p> : visible.length ? visible.map((update) => {
+        const brief = briefs[update.id];
+        return <article key={update.id} className={update.category === "Expense ratio / TER" ? "expense-ratio" : ""}>
+          <div className="regulator-card-head"><span>{update.authority}</span><small>{update.documentType} · {readableDate(update.publishedAt, "Latest listing")}</small><i>{update.category}</i></div>
+          <h3>{update.title}</h3><p>{update.brief}</p>
+          <div className="regulator-card-actions"><a href={update.url} target="_blank" rel="noreferrer" onClick={() => trackEvent("regulator_source_opened", { authority: update.authority, category: update.category })}>Official source ↗</a><button type="button" onClick={() => void scanDocument(update)}>{briefLoading === update.id ? "Scanning…" : brief ? "Hide brief" : "Simplify document"}</button><button type="button" className="share-update" onClick={() => onShare(regulatorStory(update))}>Share with community →</button></div>
+          {brief && <div className={`document-brief ${brief.error ? "error" : ""}`}>
+            <header><div><span>{brief.category}</span><strong>{brief.extractionStatus}</strong></div><i>{brief.method}</i></header>
+            {brief.error ? <p>{brief.error} Open the official source to review it manually.</p> : <><dl><div><dt>Affected</dt><dd>{brief.affectedAudience.join(" · ")}</dd></div><div><dt>Effective date</dt><dd>{brief.effectiveDate}</dd></div></dl><strong>What to know</strong><ul>{brief.keyPoints.map((point, index) => <li key={index}>{point}</li>)}</ul><p><b>Next check:</b> {brief.action}</p></>}
+            <small>{brief.disclaimer}</small>
+          </div>}
+        </article>;
+      }) : <p className="regulator-empty">No machine-readable items matched this filter. Use the official links below.</p>}
+    </div>
+    <section className="compliance-calendar">
+      <header><div><span className="pro-kicker">LOCAL WORKFLOW CALENDAR</span><h3>Compliance calendar</h3><p>Add your organisation’s verified dates. IntelFlow does not invent statutory deadlines.</p></div><strong>{reminders.length}</strong></header>
+      <div className="compliance-radar"><article><span>DAILY</span><strong>Official circular scan</strong><small>SEBI · AMFI · RBI · IRDAI · PFRDA</small></article><article><span>MONTHLY</span><strong>Expense-ratio radar</strong><small>{updates.filter((update) => update.category === "Expense ratio / TER").length} current item(s) detected</small></article><article><span>VERIFY</span><strong>ARN, EUIN, DSC and disclosure checks</strong><small>Set dates from your official records and policy.</small></article></div>
+      {reminders.length > 0 && <div className="compliance-reminders">{reminders.map((reminder) => <article key={reminder.id}><time dateTime={reminder.date}>{readableDate(reminder.date)}</time><strong>{reminder.title}</strong><button type="button" onClick={() => removeReminder(reminder.id)} aria-label={`Remove ${reminder.title}`}>×</button></article>)}</div>}
+      <details><summary>Add a verified reminder</summary><form onSubmit={addReminder}><input aria-label="Reminder title" value={reminderTitle} onChange={(event) => setReminderTitle(event.target.value)} placeholder="e.g. Annual DSC submission" /><input aria-label="Reminder date" type="date" value={reminderDate} onChange={(event) => setReminderDate(event.target.value)} /><button type="submit">Save locally</button></form></details>
+    </section>
+    <OfficialRegulatorLinks />
+  </>;
+}
+
+function buildDailyDigest(stories: Story[], updates: RegulatorUpdate[], profile: DistributorProfile) {
+  const date = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const storyLines = stories.slice(0, 5).flatMap((story, index) => [`${index + 1}. ${story.title}`, `   ${shortStoryContext(story)}`, `   Source: ${story.source} - ${story.sourceUrl}`, ""]);
+  const regulatorLines = updates.slice(0, 3).flatMap((update) => [`- ${update.authority}: ${update.title}`, `  ${update.url}`]);
+  const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" | ");
+  return [
+    "INTELFLOW DAILY CLIENT DIGEST", date, "",
+    "TODAY IN FIVE", ...storyLines,
+    "REGULATOR WATCH", ...(regulatorLines.length ? regulatorLines : ["No machine-readable official item was available when this digest was created. Verify the regulator websites directly."]), "",
+    "CLIENT ACTION", "What you can do: Stay aligned with your agreed goals and raise any change in time horizon, cash needs or risk comfort.", "What to avoid: Do not buy, sell or switch only because of one headline.", "",
+    "IMPORTANT", "This digest is for information only. It is not investment advice, a research recommendation or a buy/sell view. One headline does not require an immediate portfolio change. Verify each original source before relying on it.",
+    profile.disclaimer ? `Disclaimer: ${profile.disclaimer}` : "", identity ? `Shared by: ${identity}` : "", profile.phone ? `Contact: ${profile.phone}` : "",
+  ].filter((line) => line !== "").join("\n");
+}
+
+function pdfSafe(value: string) {
+  return value.normalize("NFKD").replace(/₹/g, "Rs ").replace(/[–—]/g, "-").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[^\x20-\x7E\n]/g, "");
+}
+
+function wrapDigestLines(value: string, width = 86) {
+  return pdfSafe(value).split("\n").flatMap((paragraph) => {
+    if (!paragraph.trim()) return [""];
+    const words = paragraph.split(/\s+/);
+    const lines: string[] = [];
+    let line = "";
+    words.forEach((word) => {
+      if (!line || `${line} ${word}`.length <= width) line = line ? `${line} ${word}` : word;
+      else { lines.push(line); line = word; }
+    });
+    if (line) lines.push(line);
+    return lines;
+  });
+}
+
+function createDigestPdf(value: string) {
+  const lines = wrapDigestLines(value);
+  const pages = Array.from({ length: Math.max(1, Math.ceil(lines.length / 46)) }, (_, index) => lines.slice(index * 46, (index + 1) * 46));
+  const pageIds = pages.map((_, index) => 3 + index);
+  const contentIds = pages.map((_, index) => 3 + pages.length + index);
+  const fontId = 3 + pages.length * 2;
+  const objects: string[] = [];
+  objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+  objects[2] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`;
+  pages.forEach((page, index) => {
+    objects[pageIds[index]] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentIds[index]} 0 R >>`;
+    const commands = page.map((line, lineIndex) => {
+      const escaped = line.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+      const size = lineIndex === 0 && index === 0 ? 16 : /^[A-Z][A-Z ]+$/.test(line) ? 12 : 9;
+      return `/F1 ${size} Tf (${escaped}) Tj T*`;
+    }).join("\n");
+    const stream = `BT\n50 798 Td\n14 TL\n${commands}\nET`;
+    objects[contentIds[index]] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  });
+  objects[fontId] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+  let output = "%PDF-1.4\n";
+  const offsets = [0];
+  for (let id = 1; id <= fontId; id += 1) { offsets[id] = output.length; output += `${id} 0 obj\n${objects[id]}\nendobj\n`; }
+  const xref = output.length;
+  output += `xref\n0 ${fontId + 1}\n0000000000 65535 f \n`;
+  for (let id = 1; id <= fontId; id += 1) output += `${String(offsets[id]).padStart(10, "0")} 00000 n \n`;
+  output += `trailer\n<< /Size ${fontId + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([output], { type: "application/pdf" });
+}
+
+function downloadBlob(blob: Blob, name: string) {
+  const anchor = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function DailyClientDigest({ stories, updates, profile, locked, onOutput }: { stories: Story[]; updates: RegulatorUpdate[]; profile: DistributorProfile; locked: boolean; onOutput: (action: string) => void }) {
+  const [status, setStatus] = useState("");
+  const digest = buildDailyDigest(stories, updates, profile);
+  const dateKey = new Date().toISOString().slice(0, 10);
+  function record(action: string, message: string) { onOutput(action); setStatus(message); trackEvent("daily_digest_exported", { format: action.replace("daily_digest_", "") }); }
+  async function copyDigest() { if (locked) return; await navigator.clipboard?.writeText(digest); record("daily_digest_copy", "Client digest copied."); }
+  function downloadText() { if (locked) return; downloadBlob(new Blob([digest], { type: "text/plain;charset=utf-8" }), `intelflow-client-digest-${dateKey}.txt`); record("daily_digest_text", "Text digest downloaded."); }
+  function downloadPdf() { if (locked) return; downloadBlob(createDigestPdf(digest), `intelflow-client-digest-${dateKey}.pdf`); record("daily_digest_pdf", "PDF digest downloaded."); }
+  return <section className="daily-client-digest"><div><span className="pro-kicker">READY TO REVIEW · TODAY</span><h2>Daily Client Digest</h2><p>Five useful headlines, official-update watch and one calm client action—generated locally from today’s feed.</p><small>Editable source-backed text · neutral language · no buy/sell recommendation</small></div><div className="digest-preview"><span>{stories.length} NEWS ITEMS</span><strong>{updates.slice(0, 3).length} regulator updates</strong><small>{new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</small></div><div className="digest-actions"><button type="button" disabled={locked} onClick={() => void copyDigest()}>Copy text</button><button type="button" disabled={locked} onClick={downloadText}>Download .txt</button><button type="button" className="primary" disabled={locked} onClick={downloadPdf}>Download PDF</button></div>{status && <p role="status">{status}</p>}</section>;
 }
 
 function OfficialRegulatorLinks() {
