@@ -29,6 +29,12 @@ type Story = {
   coverage: number;
 };
 
+type AppPage = "feed" | "saved" | "discover" | "pro" | "settings";
+type ProTab = "desk" | "social" | "regulators" | "notes" | "profile";
+
+const appPages: AppPage[] = ["feed", "saved", "discover", "pro", "settings"];
+const proTabs: ProTab[] = ["desk", "social", "regulators", "notes", "profile"];
+
 type DistributorProfile = {
   name: string;
   arn: string;
@@ -205,7 +211,8 @@ export default function Home() {
   const [selected, setSelected] = useState<string[]>(["AI", "India", "Technology", "Markets"]);
   const [activeTag, setActiveTag] = useState("For you");
   const [bookmarks, setBookmarks] = useState<number[]>([]);
-  const [page, setPage] = useState<"feed" | "saved" | "discover" | "pro" | "settings">("feed");
+  const [page, setPage] = useState<AppPage>("feed");
+  const [proTab, setProTab] = useState<ProTab>("desk");
   const [menuOpen, setMenuOpen] = useState(false);
   const [feedStories, setFeedStories] = useState<Story[]>(demoStories);
   const [isPro, setIsPro] = useState(false);
@@ -221,10 +228,33 @@ export default function Home() {
     setBookmarks(storage.get("intelflow:bookmarks", []));
     setIsPro(storage.get("intelflow:pro-demo", false));
     setProfile({ ...defaultDistributorProfile, ...storage.get("intelflow:distributor-profile", defaultDistributorProfile) });
-    setMode(storage.get("intelflow:mode", "reader"));
+    const applyUrlState = () => {
+      const parameters = new URLSearchParams(window.location.search);
+      const requestedPage = parameters.get("view") as AppPage | null;
+      const requestedTab = parameters.get("tab") as ProTab | null;
+      const nextPage = requestedPage && appPages.includes(requestedPage) ? requestedPage : "feed";
+      const nextTab = requestedTab && proTabs.includes(requestedTab) ? requestedTab : "desk";
+      setPage(nextPage);
+      setProTab(nextTab);
+      setActiveTag(parameters.get("topic") || "For you");
+      setMode(nextPage === "pro" ? "distributor" : "reader");
+    };
+    applyUrlState();
+    window.addEventListener("popstate", applyUrlState);
     setReady(true);
     loadFeed();
+    return () => window.removeEventListener("popstate", applyUrlState);
   }, []);
+
+  useEffect(() => {
+    const storyId = new URLSearchParams(window.location.search).get("story");
+    if (!storyId) {
+      setExplainStory(null);
+      return;
+    }
+    const linkedStory = feedStories.find((story) => String(story.id) === storyId);
+    if (linkedStory) setExplainStory(linkedStory);
+  }, [feedStories, page, proTab]);
 
   function loadFeed(force = false) {
     setRefreshing(true);
@@ -259,6 +289,7 @@ export default function Home() {
     storage.set("intelflow:interests", selected);
     trackEvent("onboarding_completed", { interest_count: selected.length });
     setOnboarded(true);
+    writeAppUrl("feed");
   }
 
   function toggleBookmark(id: number) {
@@ -270,16 +301,55 @@ export default function Home() {
     });
   }
 
-  function navigate(next: typeof page) {
+  function writeAppUrl(nextPage: AppPage, options: { tab?: ProTab; story?: Story | null; topic?: string } = {}) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", nextPage);
+    if (nextPage === "pro") {
+      url.searchParams.set("tab", options.tab || proTab);
+      if (options.story) url.searchParams.set("story", String(options.story.id));
+      else url.searchParams.delete("story");
+      url.searchParams.delete("topic");
+    } else {
+      url.searchParams.delete("tab");
+      url.searchParams.delete("story");
+      const topic = options.topic ?? (nextPage === "feed" ? activeTag : "For you");
+      if (nextPage === "feed" && topic !== "For you") url.searchParams.set("topic", topic);
+      else url.searchParams.delete("topic");
+    }
+    window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function navigate(next: AppPage) {
     setPage(next);
     setMenuOpen(false);
+    const nextMode = next === "pro" ? "distributor" : "reader";
+    setMode(nextMode);
+    storage.set("intelflow:mode", nextMode);
+    writeAppUrl(next);
+  }
+
+  function navigatePro(nextTab: ProTab, story: Story | null = null) {
+    setProTab(nextTab);
+    setPage("pro");
+    setMode("distributor");
+    setMenuOpen(false);
+    storage.set("intelflow:mode", "distributor");
+    setExplainStory(story);
+    writeAppUrl("pro", { tab: nextTab, story });
+  }
+
+  function chooseTopic(topic: string) {
+    setActiveTag(topic);
+    setPage("feed");
+    writeAppUrl("feed", { topic });
   }
 
   function switchMode(next: "reader" | "distributor") {
     setMode(next);
     storage.set("intelflow:mode", next);
     if (next === "distributor") trackEvent("distributor_mode_opened");
-    navigate(next === "reader" ? "feed" : "pro");
+    if (next === "reader") navigate("feed");
+    else navigatePro(proTab);
   }
 
   async function shareStory(story: Story) {
@@ -374,7 +444,7 @@ export default function Home() {
 
           <nav className="tag-strip" aria-label="News filters">
             {["For you", ...selected].map((tag) => (
-              <button key={tag} className={activeTag === tag ? "active" : ""} onClick={() => setActiveTag(tag)}>
+              <button key={tag} className={activeTag === tag ? "active" : ""} onClick={() => chooseTopic(tag)}>
                 {tag}
               </button>
             ))}
@@ -383,7 +453,7 @@ export default function Home() {
       )}
 
       {page === "discover" && <Discover selected={selected} setSelected={setSelected} />}
-      {page === "pro" && <DistributorPro stories={feedStories} isPro={isPro} setIsPro={setIsPro} profile={profile} setProfile={setProfile} initialStory={explainStory} />}
+      {page === "pro" && <DistributorPro stories={feedStories} isPro={isPro} setIsPro={setIsPro} profile={profile} setProfile={setProfile} initialStory={explainStory} tab={proTab} navigateTab={navigatePro} />}
       {page === "settings" && <Settings selected={selected} isPro={isPro} reset={() => { storage.set("intelflow:onboarded", false); setOnboarded(false); }} />}
 
       {(page === "feed" || page === "saved") && (
@@ -421,7 +491,7 @@ export default function Home() {
                     </div>
                     <div className="story-actions">
                       <a href={story.sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackEvent("source_opened", { item_id: String(story.id), source: story.source })}>Read full story <span>↗</span></a>
-                      {story.tags.some((tag) => ["Markets", "Business", "India"].includes(tag)) && <button className="explain-button" onClick={() => { trackEvent("client_note_created", { item_id: String(story.id), entry_point: "feed" }); setExplainStory(story); switchMode("distributor"); }}>Explain to client</button>}
+                      {story.tags.some((tag) => ["Markets", "Business", "India"].includes(tag)) && <button className="explain-button" onClick={() => { trackEvent("client_note_created", { item_id: String(story.id), entry_point: "feed" }); navigatePro("notes", story); }}>Explain to client</button>}
                       <button className="share-button" onClick={() => void shareStory(story)} aria-label={`Share ${story.title}`}><span>Share</span><i>⤴</i></button>
                     </div>
                   </div>
@@ -471,15 +541,16 @@ function Discover({ selected, setSelected }: { selected: string[]; setSelected: 
   );
 }
 
-function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initialStory }: {
+function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initialStory, tab, navigateTab }: {
   stories: Story[];
   isPro: boolean;
   setIsPro: (value: boolean) => void;
   profile: DistributorProfile;
   setProfile: (value: DistributorProfile) => void;
   initialStory: Story | null;
+  tab: ProTab;
+  navigateTab: (tab: ProTab, story?: Story | null) => void;
 }) {
-  const [tab, setTab] = useState<"desk" | "social" | "regulators" | "notes" | "profile">(initialStory ? "notes" : "desk");
   const [noteStory, setNoteStory] = useState<Story | null>(initialStory);
   const [socialStory, setSocialStory] = useState<Story | null>(initialStory);
   const [noteTone, setNoteTone] = useState<"client" | "whatsapp">("client");
@@ -506,10 +577,10 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
 
   useEffect(() => {
     if (initialStory) {
-      setNoteStory(initialStory);
-      setTab("notes");
+      if (tab === "notes") setNoteStory(initialStory);
+      if (tab === "social") setSocialStory(initialStory);
     }
-  }, [initialStory]);
+  }, [initialStory, tab]);
 
   function activateDemo() {
     storage.set("intelflow:pro-demo", true);
@@ -536,7 +607,7 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
   function openClientNote(story: Story, entryPoint: string) {
     trackEvent("client_note_created", { item_id: String(story.id), entry_point: entryPoint });
     setNoteStory(story);
-    setTab("notes");
+    navigateTab("notes", story);
   }
 
   function toggleAction(action: string) {
@@ -583,11 +654,11 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
       </header>
       <div className="pro-value-strip"><span>YOUR DAILY VALUE</span><strong>5 signals</strong><i /> <strong>4 actions</strong><i /> <strong>3 ready messages</strong></div>
       <nav className="pro-tabs" aria-label="Distributor Pro sections">
-        <button className={tab === "desk" ? "active" : ""} onClick={() => setTab("desk")}>Daily workspace</button>
-        <button className={tab === "social" ? "active" : ""} onClick={() => setTab("social")}>Social studio</button>
-        <button className={tab === "regulators" ? "active" : ""} onClick={() => setTab("regulators")}>Regulator watch</button>
-        <button className={tab === "notes" ? "active" : ""} onClick={() => setTab("notes")}>Client notes</button>
-        <button className={tab === "profile" ? "active" : ""} onClick={() => setTab("profile")}>Profile</button>
+        <button className={tab === "desk" ? "active" : ""} onClick={() => navigateTab("desk")}>Daily workspace</button>
+        <button className={tab === "social" ? "active" : ""} onClick={() => navigateTab("social")}>Social studio</button>
+        <button className={tab === "regulators" ? "active" : ""} onClick={() => navigateTab("regulators")}>Regulator watch</button>
+        <button className={tab === "notes" ? "active" : ""} onClick={() => navigateTab("notes")}>Client notes</button>
+        <button className={tab === "profile" ? "active" : ""} onClick={() => navigateTab("profile")}>Profile</button>
       </nav>
 
       {tab === "desk" && <div className="unified-desk">
@@ -607,7 +678,7 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
           <section className="morning-five">
             <div className="pro-section-title"><div><span>6-MINUTE READ</span><h2>Morning 5</h2></div><i>{morningFive.length || 5}</i></div>
             {(morningFive.length ? morningFive : stories.slice(0, 5)).map((story, index) => <article key={story.id}>
-              <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p><div className="morning-actions"><button onClick={() => openClientNote(story, "morning_five")}>Client note →</button><button onClick={() => { setSocialStory(story); setTab("social"); }}>Social card →</button></div></div>
+              <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p><div className="morning-actions"><button onClick={() => openClientNote(story, "morning_five")}>Client note →</button><button onClick={() => { setSocialStory(story); navigateTab("social", story); }}>Social card →</button></div></div>
             </article>)}
           </section>
           <aside className="regulator-watch">
@@ -633,7 +704,7 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
         </div>
       </div>}
 
-      {tab === "social" && <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={socialStory} />}
+      {tab === "social" && <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={socialStory} onStoryChange={(story) => { setSocialStory(story); navigateTab("social", story); }} />}
 
       {tab === "regulators" && <section className="regulator-page regulator-watch">
         <div className="pro-section-title"><div><span>OFFICIAL UPDATES</span><h2>Regulator Watch</h2></div></div>
@@ -665,11 +736,12 @@ function DistributorPro({ stories, isPro, setIsPro, profile, setProfile, initial
 type SocialFormat = "square" | "portrait";
 type SocialTemplate = "signal" | "market" | "regulatory";
 
-function SocialPostStudio({ stories, profile, saveProfile, initialStory }: {
+function SocialPostStudio({ stories, profile, saveProfile, initialStory, onStoryChange }: {
   stories: Story[];
   profile: DistributorProfile;
   saveProfile: (next: DistributorProfile) => void;
   initialStory: Story | null;
+  onStoryChange: (story: Story) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const firstStory = initialStory || stories[0] || demoStories[0];
@@ -697,6 +769,7 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory }: {
     setHeadline(next.title);
     setContext(shortStoryContext(next));
     setStatus("");
+    onStoryChange(next);
   }
 
   function uploadLogo(file?: File) {
