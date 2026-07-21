@@ -49,10 +49,24 @@ type DistributorProfile = {
 type TrialState = { startedAt: number; actions: number };
 type ShareStats = { views: number; sourceClicks: number; contactClicks: number; expiresAt: number; revokedAt: number | null };
 type OwnedShare = { id: string; url: string; ownerToken: string; title: string; createdAt: number; expiresAt: number; stats?: ShareStats };
+type CompanyProfile = { ticker: string; name: string; sector: string; aliases: string[] };
+type CompanyImpact = {
+  ticker: string;
+  name: string;
+  direction: "Potentially positive" | "Potentially negative" | "Mixed / conditional" | "Uncertain";
+  confidence: "High" | "Medium";
+  directness: "Direct company event" | "Sector read-through" | "Manually attached";
+  mechanism: string;
+  verify: string;
+  posture: "Watchlist" | "Wait for proof" | "Re-underwrite";
+};
+type ManualCompanyLinks = Record<string, string[]>;
 const trialDays = 7;
 const trialActions = 10;
 const trialStorageKey = "intelflow:pro-trial";
 const ownedSharesStorageKey = "intelflow:owned-shares";
+const companyWatchlistStorageKey = "intelflow:company-watchlist";
+const manualCompanyLinksStorageKey = "intelflow:manual-company-links";
 
 function getTrialStatus(trial: TrialState | null) {
   if (!trial) return { locked: false, day: 0, daysRemaining: trialDays, actionsRemaining: trialActions };
@@ -74,6 +88,106 @@ const defaultDistributorProfile: DistributorProfile = {
   brandColor: "#d0aa65",
   logo: "",
 };
+
+const companyUniverse: CompanyProfile[] = [
+  { ticker: "RELIANCE", name: "Reliance Industries", sector: "Energy & diversified", aliases: ["reliance industries", "reliance"] },
+  { ticker: "ONGC", name: "ONGC", sector: "Oil & gas", aliases: ["oil and natural gas corporation", "ongc"] },
+  { ticker: "IOC", name: "Indian Oil", sector: "Oil marketing", aliases: ["indian oil corporation", "indian oil", "ioc"] },
+  { ticker: "INTERGLOBE", name: "InterGlobe Aviation", sector: "Aviation", aliases: ["interglobe aviation", "indigo airlines", "indigo"] },
+  { ticker: "ASIANPAINT", name: "Asian Paints", sector: "Paints", aliases: ["asian paints"] },
+  { ticker: "GLENMARK", name: "Glenmark Pharmaceuticals", sector: "Pharma", aliases: ["glenmark pharmaceuticals", "glenmark pharma", "glenmark"] },
+  { ticker: "SUNPHARMA", name: "Sun Pharmaceutical", sector: "Pharma", aliases: ["sun pharmaceutical", "sun pharma"] },
+  { ticker: "DRREDDY", name: "Dr. Reddy's Laboratories", sector: "Pharma", aliases: ["dr. reddy's", "dr reddy's", "dr reddys", "drreddy"] },
+  { ticker: "CIPLA", name: "Cipla", sector: "Pharma", aliases: ["cipla"] },
+  { ticker: "LUPIN", name: "Lupin", sector: "Pharma", aliases: ["lupin"] },
+  { ticker: "TCS", name: "Tata Consultancy Services", sector: "IT services", aliases: ["tata consultancy services", "tcs"] },
+  { ticker: "INFY", name: "Infosys", sector: "IT services", aliases: ["infosys", "infy"] },
+  { ticker: "HCLTECH", name: "HCLTech", sector: "IT services", aliases: ["hcl technologies", "hcltech", "hcl tech"] },
+  { ticker: "WIPRO", name: "Wipro", sector: "IT services", aliases: ["wipro"] },
+  { ticker: "HDFCBANK", name: "HDFC Bank", sector: "Banking", aliases: ["hdfc bank"] },
+  { ticker: "ICICIBANK", name: "ICICI Bank", sector: "Banking", aliases: ["icici bank"] },
+  { ticker: "SBIN", name: "State Bank of India", sector: "Banking", aliases: ["state bank of india", "sbi"] },
+  { ticker: "BAJFINANCE", name: "Bajaj Finance", sector: "Consumer finance", aliases: ["bajaj finance"] },
+  { ticker: "TATAMOTORS", name: "Tata Motors", sector: "Automobiles", aliases: ["tata motors"] },
+  { ticker: "MARUTI", name: "Maruti Suzuki", sector: "Automobiles", aliases: ["maruti suzuki", "maruti"] },
+  { ticker: "M&M", name: "Mahindra & Mahindra", sector: "Automobiles", aliases: ["mahindra & mahindra", "mahindra and mahindra"] },
+  { ticker: "TATAPOWER", name: "Tata Power", sector: "Power", aliases: ["tata power"] },
+  { ticker: "NTPC", name: "NTPC", sector: "Power", aliases: ["ntpc"] },
+  { ticker: "HDFCLIFE", name: "HDFC Life", sector: "Insurance", aliases: ["hdfc life"] },
+  { ticker: "SBILIFE", name: "SBI Life", sector: "Insurance", aliases: ["sbi life"] },
+];
+
+function companyByTicker(ticker: string) {
+  return companyUniverse.find((company) => company.ticker === ticker);
+}
+
+function companyImpact(company: CompanyProfile, values: Omit<CompanyImpact, "ticker" | "name">): CompanyImpact {
+  return { ticker: company.ticker, name: company.name, ...values };
+}
+
+function getCompanyImpacts(story: Story, manualTickers: string[] = []) {
+  const text = `${story.title} ${story.summary}`.toLowerCase();
+  const impacts: CompanyImpact[] = [];
+  const add = (impact: CompanyImpact) => {
+    if (!impacts.some((item) => item.ticker === impact.ticker)) impacts.push(impact);
+  };
+  const containsAny = (...terms: string[]) => terms.some((term) => text.includes(term));
+  const containsAlias = (alias: string) => alias.length > 4 ? text.includes(alias) : new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text);
+
+  companyUniverse.forEach((company) => {
+    if (!company.aliases.some(containsAlias)) return;
+    const pharmaRegulatory = company.sector === "Pharma" && containsAny("usfda", "u.s. fda", "fda approval", "regulatory approval", "drug approval", "gets nod");
+    add(companyImpact(company, pharmaRegulatory ? {
+      direction: "Potentially positive", confidence: "High", directness: "Direct company event",
+      mechanism: "The reported regulatory milestone may support a product opportunity, subject to launch timing and commercial significance.",
+      verify: "Confirm the exact product, entity, market size, competition and launch status in the company or exchange filing.", posture: "Wait for proof",
+    } : {
+      direction: "Uncertain", confidence: "High", directness: "Direct company event",
+      mechanism: "The company is named directly, but the earnings or valuation effect cannot be established from the headline alone.",
+      verify: "Check the original filing, affected financial line item, management commentary and whether the market has already reacted.", posture: "Re-underwrite",
+    }));
+  });
+
+  if (containsAny("crude oil", "oil price", "brent", "opec")) {
+    const reliance = companyByTicker("RELIANCE");
+    const ongc = companyByTicker("ONGC");
+    const interglobe = companyByTicker("INTERGLOBE");
+    if (reliance) add(companyImpact(reliance, { direction: "Mixed / conditional", confidence: "Medium", directness: "Sector read-through", mechanism: "Upstream realisations, refining margins and petrochemical spreads can move in different directions.", verify: "Check crude direction, refining and product spreads, inventory effects and management commentary.", posture: "Watchlist" }));
+    if (ongc) add(companyImpact(ongc, { direction: "Potentially positive", confidence: "Medium", directness: "Sector read-through", mechanism: "Sustained higher crude can support upstream realisations, subject to policy and production variables.", verify: "Check realised prices, production, windfall taxes or subsidy exposure and the duration of the move.", posture: "Watchlist" }));
+    if (interglobe) add(companyImpact(interglobe, { direction: "Potentially negative", confidence: "Medium", directness: "Sector read-through", mechanism: "Aviation turbine fuel is a material operating cost, although fares, hedging and demand can offset part of the pressure.", verify: "Check ATF prices, fare environment, capacity, hedging and management guidance.", posture: "Watchlist" }));
+  }
+
+  if (containsAny("repo rate", "interest rate", "rate cut", "rate hike", "liquidity", "rbi policy")) {
+    ["HDFCBANK", "BAJFINANCE"].forEach((ticker) => { const company = companyByTicker(ticker); if (company) add(companyImpact(company, { direction: "Mixed / conditional", confidence: "Medium", directness: "Sector read-through", mechanism: "Funding costs, loan growth, deposit competition and margins can respond differently to a rate or liquidity change.", verify: "Check the official policy, transmission timing, asset-liability mix and management margin guidance.", posture: "Watchlist" })); });
+  }
+
+  if (containsAny("rupee", "dollar", "currency", "us technology spending", "global technology spending", "it spending")) {
+    ["TCS", "INFY"].forEach((ticker) => { const company = companyByTicker(ticker); if (company) add(companyImpact(company, { direction: "Mixed / conditional", confidence: "Medium", directness: "Sector read-through", mechanism: "Export revenue translation may benefit from currency moves, while client budgets and hedging determine the operating effect.", verify: "Check constant-currency growth, deal commentary, cross-currency impact and hedging disclosures.", posture: "Watchlist" })); });
+  }
+
+  if (containsAny("electric vehicle", "ev sales", "vehicle demand", "auto sales", "emission norms")) {
+    ["TATAMOTORS", "M&M"].forEach((ticker) => { const company = companyByTicker(ticker); if (company) add(companyImpact(company, { direction: "Mixed / conditional", confidence: "Medium", directness: "Sector read-through", mechanism: "Demand, product mix, incentives and transition costs may affect volumes and margins differently.", verify: "Check model-level volumes, incentives, battery costs, market share and margin guidance.", posture: "Watchlist" })); });
+  }
+
+  if (containsAny("renewable energy", "power demand", "electricity demand", "solar capacity", "power tariff")) {
+    ["NTPC", "TATAPOWER"].forEach((ticker) => { const company = companyByTicker(ticker); if (company) add(companyImpact(company, { direction: "Mixed / conditional", confidence: "Medium", directness: "Sector read-through", mechanism: "Capacity additions, utilisation, tariffs and financing costs determine whether the theme becomes an earnings driver.", verify: "Check commissioned capacity, project returns, tariff orders, fuel availability and debt funding.", posture: "Watchlist" })); });
+  }
+
+  manualTickers.forEach((ticker) => {
+    const company = companyByTicker(ticker);
+    if (company && !impacts.some((impact) => impact.ticker === ticker)) add(companyImpact(company, {
+      direction: "Uncertain", confidence: "Medium", directness: "Manually attached",
+      mechanism: "A distributor attached this company for further research; IntelFlow has not inferred a directional effect.",
+      verify: "Document the transmission channel and verify it against an official company or exchange disclosure.", posture: "Wait for proof",
+    }));
+  });
+
+  return impacts.sort((a, b) => Number(b.confidence === "High") - Number(a.confidence === "High")).slice(0, 4);
+}
+
+function impactSummary(impact: CompanyImpact) {
+  return `${impact.name} (${impact.ticker}) — ${impact.direction}. ${impact.mechanism}`;
+}
 
 const interests = [
   ["AI", "Artificial Intelligence", "✦"],
@@ -244,11 +358,15 @@ export default function Home() {
   const [activeSources, setActiveSources] = useState(0);
   const [sourceCount, setSourceCount] = useState(0);
   const [visibleCount, setVisibleCount] = useState(20);
+  const [companyWatchlist, setCompanyWatchlist] = useState<string[]>([]);
+  const [manualCompanyLinks, setManualCompanyLinks] = useState<ManualCompanyLinks>({});
 
   useEffect(() => {
     setOnboarded(storage.get("intelflow:onboarded", false));
     setSelected(storage.get("intelflow:interests", ["AI", "India", "Technology", "Markets"]));
     setBookmarks(storage.get("intelflow:bookmarks", []));
+    setCompanyWatchlist(storage.get(companyWatchlistStorageKey, []));
+    setManualCompanyLinks(storage.get(manualCompanyLinksStorageKey, {}));
     const savedTrial = storage.get<TrialState | null>(trialStorageKey, null);
     if (savedTrial) setTrial(savedTrial);
     else if (storage.get("intelflow:pro-demo", false)) {
@@ -342,6 +460,27 @@ export default function Home() {
     });
   }
 
+  function toggleCompanyWatch(ticker: string) {
+    setCompanyWatchlist((current) => {
+      const next = current.includes(ticker) ? current.filter((item) => item !== ticker) : [...current, ticker];
+      storage.set(companyWatchlistStorageKey, next);
+      trackEvent("company_watchlist_updated", { ticker, following: next.includes(ticker) });
+      return next;
+    });
+  }
+
+  function attachCompanyToStory(storyId: number, ticker: string) {
+    if (!ticker) return;
+    setManualCompanyLinks((current) => {
+      const key = String(storyId);
+      const nextForStory = Array.from(new Set([...(current[key] || []), ticker]));
+      const next = { ...current, [key]: nextForStory };
+      storage.set(manualCompanyLinksStorageKey, next);
+      trackEvent("company_attached_to_story", { item_id: key, ticker });
+      return next;
+    });
+  }
+
   function writeAppUrl(nextPage: AppPage, options: { tab?: ProTab; story?: Story | null; topic?: string; tool?: StudioTool } = {}) {
     const url = new URL(window.location.href);
     url.searchParams.set("view", nextPage);
@@ -352,11 +491,13 @@ export default function Home() {
       else url.searchParams.delete("story");
       if ((options.tab || proTab) === "studio") url.searchParams.set("tool", options.tool || studioTool);
       else url.searchParams.delete("tool");
+      if ((options.tab || proTab) !== "desk") url.searchParams.delete("impact");
       url.searchParams.delete("topic");
     } else {
       url.searchParams.delete("tab");
       url.searchParams.delete("story");
       url.searchParams.delete("tool");
+      url.searchParams.delete("impact");
       const topic = options.topic ?? (nextPage === "feed" ? activeTag : "For you");
       if (nextPage === "feed" && topic !== "For you") url.searchParams.set("topic", topic);
       else url.searchParams.delete("topic");
@@ -494,6 +635,12 @@ export default function Home() {
             <p><strong>{feedStories.filter((story) => story.tags.includes("US")).length}</strong> US</p>
           </section>
 
+          <a className="impact-radar" href="/?view=pro&tab=desk&section=company-impact">
+            <span className="impact-radar-icon">↗</span>
+            <div><small>NEW · COMPANY IMPACT</small><strong>{feedStories.filter((story) => getCompanyImpacts(story, manualCompanyLinks[String(story.id)]).length).length} stories linked to listed companies</strong><p>See the transmission channel, what to verify and today’s research queue.</p></div>
+            <b>{companyWatchlist.length ? `${companyWatchlist.length} watched` : "Open radar"} →</b>
+          </a>
+
           <nav className="tag-strip" aria-label="News filters">
             {["For you", ...selected].map((tag) => (
               <button key={tag} className={activeTag === tag ? "active" : ""} onClick={() => chooseTopic(tag)}>
@@ -504,7 +651,7 @@ export default function Home() {
         </>
       )}
 
-      {page === "pro" && <DistributorPro stories={feedStories} trial={trial} setTrial={setTrial} profile={profile} setProfile={setProfile} initialStory={explainStory} tab={proTab} tool={studioTool} navigateTab={navigatePro} />}
+      {page === "pro" && <DistributorPro stories={feedStories} trial={trial} setTrial={setTrial} profile={profile} setProfile={setProfile} initialStory={explainStory} tab={proTab} tool={studioTool} navigateTab={navigatePro} companyWatchlist={companyWatchlist} manualCompanyLinks={manualCompanyLinks} toggleCompanyWatch={toggleCompanyWatch} attachCompanyToStory={attachCompanyToStory} />}
 
       {(page === "feed" || page === "saved") && (
         <section className="story-stage">
@@ -540,6 +687,7 @@ export default function Home() {
                       <span className="coverage-stack"><i /><i /><i /></span>
                       <span>{story.coverage > 1 ? `Connected from ${story.coverage} reports` : "Briefed from the original report"}</span>
                     </div>
+                    <StoryCompanyImpact story={story} manualTickers={manualCompanyLinks[String(story.id)] || []} watchedTickers={companyWatchlist} />
                     <div className="story-actions">
                       <a href={story.sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackEvent("source_opened", { item_id: String(story.id), source: story.source })}>Read full story <span>↗</span></a>
                       {story.tags.some((tag) => ["Markets", "Business", "India", "Regulation", "Personal Finance", "Economy", "US"].includes(tag)) && <button className="explain-button" onClick={() => { trackEvent("client_note_created", { item_id: String(story.id), entry_point: "feed" }); navigatePro("studio", story, "note"); }}>Explain to client</button>}
@@ -568,6 +716,18 @@ function topicColor(tag: string) {
   return ({ AI: "#6550b8", India: "#bf563d", US: "#244d75", Markets: "#08745c", Economy: "#a16d20", Regulation: "#6e4d85", "Personal Finance": "#207a65", Energy: "#9a6b1f", Technology: "#256b91", Business: "#a66f1b", Startups: "#a94c7e", World: "#354a70", Science: "#277e86", Health: "#b44c65", Cricket: "#43763f", Sports: "#a9612a", Entertainment: "#87528d" } as Record<string, string>)[tag] || "#594b82";
 }
 
+function StoryCompanyImpact({ story, manualTickers, watchedTickers }: { story: Story; manualTickers: string[]; watchedTickers: string[] }) {
+  const impacts = getCompanyImpacts(story, manualTickers);
+  if (!impacts.length) return null;
+  const watched = impacts.filter((impact) => watchedTickers.includes(impact.ticker)).length;
+  return <aside className="story-impact-card" aria-label={`Company impact for ${story.title}`}>
+    <div className="story-impact-head"><span>◆ COMPANY IMPACT</span><small>{impacts[0].confidence} confidence · {impacts[0].directness}</small></div>
+    <strong>{impacts[0].ticker} · {impacts[0].direction}</strong>
+    <p>{impacts[0].mechanism}</p>
+    <div><span>{impacts.map((impact) => `${watchedTickers.includes(impact.ticker) ? "★ " : ""}${impact.ticker}`).join(" · ")}</span><a href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`}>{watched ? `${watched} watched · ` : ""}See full read-through →</a></div>
+  </aside>;
+}
+
 function selectMorningFive(stories: Story[]) {
   const selected: Story[] = [];
   const used = new Set<number>();
@@ -591,7 +751,7 @@ function selectMorningFive(stories: Story[]) {
   return selected.slice(0, 5);
 }
 
-function DistributorPro({ stories, trial, setTrial, profile, setProfile, initialStory, tab, tool, navigateTab }: {
+function DistributorPro({ stories, trial, setTrial, profile, setProfile, initialStory, tab, tool, navigateTab, companyWatchlist, manualCompanyLinks, toggleCompanyWatch, attachCompanyToStory }: {
   stories: Story[];
   trial: TrialState | null;
   setTrial: (value: TrialState | null | ((current: TrialState | null) => TrialState | null)) => void;
@@ -601,6 +761,10 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   tab: ProTab;
   tool: StudioTool;
   navigateTab: (tab: ProTab, story?: Story | null, tool?: StudioTool) => void;
+  companyWatchlist: string[];
+  manualCompanyLinks: ManualCompanyLinks;
+  toggleCompanyWatch: (ticker: string) => void;
+  attachCompanyToStory: (storyId: number, ticker: string) => void;
 }) {
   const [studioStory, setStudioStory] = useState<Story | null>(initialStory);
   const [copied, setCopied] = useState(false);
@@ -608,6 +772,9 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   const [ownedShares, setOwnedShares] = useState<OwnedShare[]>(() => storage.get(ownedSharesStorageKey, []));
   const [shareExpiry, setShareExpiry] = useState(30);
   const [noteShareStatus, setNoteShareStatus] = useState("");
+  const [includeCompanyImpact, setIncludeCompanyImpact] = useState(false);
+  const [attachStoryId, setAttachStoryId] = useState(String(stories[0]?.id || ""));
+  const [attachTicker, setAttachTicker] = useState(companyUniverse[0].ticker);
   const contextCache = useRef(new Map<string, string>());
   const [articleContext, setArticleContext] = useState<{ storyId: number; text: string; status: "loading" | "article" | "fallback" }>({
     storyId: initialStory?.id || 0,
@@ -617,10 +784,23 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   const morningFive = selectMorningFive(stories);
   const practiceStories = stories.filter((story) => story.tags.some((tag) => ["Markets", "Regulation", "Personal Finance", "US", "Economy"].includes(tag))).slice(0, 6);
   const activeStudioStory = studioStory || stories[0] || demoStories[0];
+  const activeCompanyImpact = getCompanyImpacts(activeStudioStory, manualCompanyLinks[String(activeStudioStory.id)])[0] || null;
   const resolvedArticleContext = articleContext.storyId === activeStudioStory.id ? articleContext.text : shortStoryContext(activeStudioStory);
   const articleContextStatus = articleContext.storyId === activeStudioStory.id ? articleContext.status : "loading";
   const studioStoryOptions = [activeStudioStory, ...stories.filter((story) => story.id !== activeStudioStory.id)].slice(0, 40);
   const trialStatus = getTrialStatus(trial);
+  const requestedImpactId = typeof window !== "undefined" ? Number(new URLSearchParams(window.location.search).get("impact") || 0) : 0;
+  const impactQueue = stories
+    .map((story) => ({ story, impacts: getCompanyImpacts(story, manualCompanyLinks[String(story.id)]) }))
+    .filter((item) => item.impacts.length)
+    .sort((a, b) => {
+      const requested = Number(b.story.id === requestedImpactId) - Number(a.story.id === requestedImpactId);
+      if (requested) return requested;
+      const watched = Number(b.impacts.some((impact) => companyWatchlist.includes(impact.ticker))) - Number(a.impacts.some((impact) => companyWatchlist.includes(impact.ticker)));
+      if (watched) return watched;
+      return Number(b.impacts[0].confidence === "High") - Number(a.impacts[0].confidence === "High");
+    })
+    .slice(0, 6);
   const trialProgress = trialStatus.locked ? "Trial complete" : [trialStatus.daysRemaining ? `${trialStatus.daysRemaining} day${trialStatus.daysRemaining === 1 ? "" : "s"} left` : "Time requirement complete", trialStatus.actionsRemaining ? `${trialStatus.actionsRemaining} output${trialStatus.actionsRemaining === 1 ? "" : "s"} left` : "Output allowance used"].join(" · ");
   const regulatorAlerts = [
     { authority: "SEBI", title: "Review new circulars before client communication", time: "Watchlist · Today", level: "Action" },
@@ -706,8 +886,8 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   }
 
   useEffect(() => {
-    setDraft(buildClientNote(activeStudioStory, profile, resolvedArticleContext));
-  }, [activeStudioStory, profile, resolvedArticleContext]);
+    setDraft(buildClientNote(activeStudioStory, profile, resolvedArticleContext, includeCompanyImpact ? activeCompanyImpact : null));
+  }, [activeStudioStory, profile, resolvedArticleContext, includeCompanyImpact, activeCompanyImpact?.ticker]);
 
   async function copyNote() {
     if (!allowOutput()) return;
@@ -724,10 +904,11 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
     try {
       const canvas = document.createElement("canvas");
       const template: SocialTemplate = activeStudioStory.tags.includes("Regulation") ? "regulatory" : activeStudioStory.tags.includes("Markets") ? "market" : "signal";
-      await renderSocialCard(canvas, { story: activeStudioStory, headline: activeStudioStory.title, context: resolvedArticleContext, profile, format: "square", template });
+      await renderSocialCard(canvas, { story: activeStudioStory, headline: activeStudioStory.title, context: resolvedArticleContext, profile, format: "square", template, impact: includeCompanyImpact ? activeCompanyImpact : null });
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
       if (!blob) throw new Error("Preview image could not be created.");
-      const share = await publishHostedShare(activeStudioStory, resolvedArticleContext, profile, blob, shareExpiry);
+      const shareContext = includeCompanyImpact && activeCompanyImpact ? `${resolvedArticleContext} Market read-through: ${impactSummary(activeCompanyImpact)}` : resolvedArticleContext;
+      const share = await publishHostedShare(activeStudioStory, shareContext, profile, blob, shareExpiry);
       saveOwnedShare(share);
       recordTrialAction("share_link_created");
       trackEvent("share_link_created", { item_id: String(activeStudioStory.id), expires_in_days: shareExpiry, format: "written" });
@@ -763,7 +944,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
         </div>
         <div className="pro-feature-grid">
           <article><span>01</span><strong>Morning 5</strong><p>The five market, business and regulatory signals most useful for today.</p></article>
-          <article><span>02</span><strong>Practice feed</strong><p>Live stories converted into concise client-conversation angles.</p></article>
+          <article className="impact-feature"><span>02 · NEW</span><strong>Company Impact</strong><p>Connect a headline to listed companies, see the transmission channel and build a disciplined research queue.</p></article>
           <article><span>03</span><strong>Client content studio</strong><p>Turn one headline into a concise note or an attention-grabbing branded image.</p></article>
           <article><span>04</span><strong>Source + compliance kit</strong><p>Neutral starters, regulator links, attribution and review reminders in one workflow.</p></article>
         </div>
@@ -787,6 +968,28 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
       </nav>
 
       {tab === "desk" && <div className="unified-desk">
+        <section className="company-impact-hub" id="company-impact">
+          <header className="impact-hub-hero"><div><span className="pro-kicker">NEW · NEWS-TO-COMPANY RESEARCH</span><h2>Company Impact</h2><p>Understand why a headline may matter, what financial variable to inspect and what still needs proof. These are research prompts—not buy, sell or hold recommendations.</p></div><div><strong>{impactQueue.length}</strong><span>live connections</span><small>{companyWatchlist.length} companies watched locally</small></div></header>
+          <div className="impact-attach-bar">
+            <div><strong>Attach an article manually</strong><span>Add a company when you see a connection IntelFlow has not inferred.</span></div>
+            <select aria-label="Article to attach" value={attachStoryId} onChange={(event) => setAttachStoryId(event.target.value)}>{stories.slice(0, 40).map((story) => <option key={story.id} value={story.id}>{story.title}</option>)}</select>
+            <select aria-label="Company to attach" value={attachTicker} onChange={(event) => setAttachTicker(event.target.value)}>{companyUniverse.map((company) => <option key={company.ticker} value={company.ticker}>{company.ticker} · {company.name}</option>)}</select>
+            <button type="button" onClick={() => attachCompanyToStory(Number(attachStoryId), attachTicker)}>Attach</button>
+          </div>
+          <div className="impact-queue">
+            <div className="impact-queue-label"><span>TODAY’S RESEARCH QUEUE</span><small>Prioritised by direct mention, watchlist relevance and confidence</small></div>
+            {impactQueue.length ? impactQueue.map(({ story, impacts }) => <article key={story.id} className={story.id === requestedImpactId ? "requested" : ""}>
+              <div className="impact-story-line"><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><a href={story.sourceUrl} target="_blank" rel="noreferrer">Verify source ↗</a></div>
+              <div className="impact-company-grid">{impacts.map((impact) => <div className="impact-company" key={impact.ticker}>
+                <div className="impact-company-title"><span>{impact.ticker}</span><i className={impact.direction.includes("positive") ? "positive" : impact.direction.includes("negative") ? "negative" : "mixed"}>{impact.direction}</i><button type="button" className={companyWatchlist.includes(impact.ticker) ? "watched" : ""} onClick={() => toggleCompanyWatch(impact.ticker)}>{companyWatchlist.includes(impact.ticker) ? "★ Watching" : "☆ Watch"}</button></div>
+                <strong>{impact.name}</strong><p>{impact.mechanism}</p>
+                <dl><div><dt>Connection</dt><dd>{impact.directness} · {impact.confidence}</dd></div><div><dt>What to verify</dt><dd>{impact.verify}</dd></div><div><dt>Posture</dt><dd>{impact.posture}</dd></div></dl>
+                <button type="button" className="impact-studio-link" onClick={() => { setStudioStory(story); setIncludeCompanyImpact(true); navigateTab("studio", story, "note"); }}>Add to client content →</button>
+              </div>)}</div>
+            </article>) : <p className="impact-empty">No high- or medium-confidence company connections are available yet. Attach a current article above to begin a research note.</p>}
+          </div>
+          <footer><strong>Today’s research discipline</strong><span>Verify the original source → identify the affected financial line → check what the market may already reflect → wait for proof before action.</span></footer>
+        </section>
         <div className="pro-desk-grid focused-desk">
           <section className="morning-five">
             <div className="pro-section-title"><div><span>6-MINUTE READ</span><h2>Morning 5</h2></div><i>{morningFive.length || 5}</i></div>
@@ -823,6 +1026,11 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
             <button role="tab" aria-selected={tool === "image"} className={tool === "image" ? "active" : ""} onClick={() => navigateTab("studio", activeStudioStory, "image")}><span>▣</span><strong>Social image</strong><small>Design and share</small></button>
           </div>
         </div>
+        <label className={`impact-inclusion-control ${includeCompanyImpact && activeCompanyImpact ? "active" : ""}`}>
+          <input type="checkbox" checked={includeCompanyImpact} disabled={!activeCompanyImpact} onChange={(event) => setIncludeCompanyImpact(event.target.checked)} />
+          <span><strong>{activeCompanyImpact ? `Include ${activeCompanyImpact.ticker} Company Impact` : "No high-confidence company connection"}</strong><small>{activeCompanyImpact ? `${activeCompanyImpact.direction} · ${activeCompanyImpact.posture} · added as neutral research context` : "Choose another headline or attach a company in Today’s research queue."}</small></span>
+          <i>{includeCompanyImpact && activeCompanyImpact ? "INCLUDED" : "OPTIONAL"}</i>
+        </label>
 
         {tool === "note" ? <div className="content-note-workspace">
           <aside className="content-story-brief">
@@ -836,7 +1044,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
             {noteShareStatus && <p className="studio-status" role="status">{noteShareStatus}</p>}
             <p className="compliance-note"><strong>Before sending:</strong> review accuracy, suitability, source context and your organisation’s compliance policy. IntelFlow does not approve communications or provide investment advice.</p>
           </div>
-        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} initialContext={resolvedArticleContext} embedded trialLocked={trialStatus.locked} onTrialAction={recordTrialAction} onShareCreated={saveOwnedShare} onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
+        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} initialContext={resolvedArticleContext} impact={includeCompanyImpact ? activeCompanyImpact : null} embedded trialLocked={trialStatus.locked} onTrialAction={recordTrialAction} onShareCreated={saveOwnedShare} onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
         <ShareLinkDashboard links={ownedShares} onChange={replaceOwnedShares} />
       </section>}
 
@@ -862,12 +1070,13 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 type SocialFormat = "square" | "portrait";
 type SocialTemplate = "signal" | "market" | "regulatory";
 
-function SocialPostStudio({ stories, profile, saveProfile, initialStory, initialContext, onStoryChange, onTrialAction, onShareCreated, trialLocked = false, embedded = false }: {
+function SocialPostStudio({ stories, profile, saveProfile, initialStory, initialContext, impact, onStoryChange, onTrialAction, onShareCreated, trialLocked = false, embedded = false }: {
   stories: Story[];
   profile: DistributorProfile;
   saveProfile: (next: DistributorProfile) => void;
   initialStory: Story | null;
   initialContext: string;
+  impact: CompanyImpact | null;
   onStoryChange: (story: Story) => void;
   onTrialAction: (action: string) => void;
   onShareCreated: (share: OwnedShare) => void;
@@ -896,8 +1105,8 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
 
   useEffect(() => {
     if (!canvasRef.current) return;
-    void renderSocialCard(canvasRef.current, { story, headline, context, profile, format, template });
-  }, [story, headline, context, profile, format, template]);
+    void renderSocialCard(canvasRef.current, { story, headline, context, profile, format, template, impact });
+  }, [story, headline, context, profile, format, template, impact]);
 
   function chooseStory(next: Story) {
     setStory(next);
@@ -924,12 +1133,13 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
   function buildCaption() {
     const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
     const guidance = clientActionGuidance(story);
-    return `${headline}\n\n${context}\n\nDo: ${guidance.do}\nDon't: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. No buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
+    const marketReadThrough = impact ? `\n\nCompany Impact: ${impactSummary(impact)}\nResearch posture: ${impact.posture}. Verify: ${impact.verify}` : "";
+    return `${headline}\n\n${context}${marketReadThrough}\n\nDo: ${guidance.do}\nDon't: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. No buy/sell view or research recommendation. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
   }
 
   async function makeBlob() {
     if (!canvasRef.current) return null;
-    await renderSocialCard(canvasRef.current, { story, headline, context, profile, format, template });
+    await renderSocialCard(canvasRef.current, { story, headline, context, profile, format, template, impact });
     return new Promise<Blob | null>((resolve) => canvasRef.current?.toBlob(resolve, "image/png"));
   }
 
@@ -988,7 +1198,8 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
     try {
       const blob = await makeBlob();
       if (!blob) throw new Error("Preview image could not be created.");
-      const share = await publishHostedShare({ ...story, title: headline }, context, profile, blob, shareExpiry);
+      const shareContext = impact ? `${context} Market read-through: ${impactSummary(impact)}` : context;
+      const share = await publishHostedShare({ ...story, title: headline }, shareContext, profile, blob, shareExpiry);
       onShareCreated(share);
       onTrialAction("share_link_created");
       trackEvent("share_link_created", { item_id: String(story.id), expires_in_days: shareExpiry, format: "social" });
@@ -1158,8 +1369,8 @@ function loadCanvasImage(source: string) {
   });
 }
 
-async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Story; headline: string; context: string; profile: DistributorProfile; format: SocialFormat; template: SocialTemplate }) {
-  const { story, headline, context: summary, profile, format, template } = options;
+async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Story; headline: string; context: string; profile: DistributorProfile; format: SocialFormat; template: SocialTemplate; impact?: CompanyImpact | null }) {
+  const { story, headline, context: summary, profile, format, template, impact } = options;
   const width = 1080;
   const height = format === "portrait" ? 1350 : 1080;
   canvas.width = width;
@@ -1227,37 +1438,51 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   context.fillText(`${category}  ·  ${story.tags.slice(0, 2).join(" + ").toUpperCase()}`, margin, 235);
   context.fillStyle = "#f5f6f3";
   context.font = `600 ${format === "portrait" ? 72 : 68}px Georgia, serif`;
-  let cursor = wrapCanvasText(context, headline, margin, 320, width - margin * 2, format === "portrait" ? 82 : 78, format === "portrait" ? 5 : 4);
+  const headlineLines = impact ? (format === "portrait" ? 4 : 3) : (format === "portrait" ? 5 : 4);
+  let cursor = wrapCanvasText(context, headline, margin, 320, width - margin * 2, format === "portrait" ? 82 : 78, headlineLines);
   cursor += 28;
   context.fillStyle = "#aebbc1";
   context.font = "400 29px Arial, sans-serif";
-  wrapCanvasText(context, summary, margin, cursor, width - margin * 2, 42, format === "portrait" ? 4 : 2);
+  wrapCanvasText(context, summary, margin, cursor, width - margin * 2, 42, impact ? 1 : format === "portrait" ? 4 : 2);
 
-  const sourceY = height - 340;
+  const sourceY = height - 390;
   context.fillStyle = "rgba(7,15,20,.72)";
-  context.roundRect(margin, sourceY, width - margin * 2, 215, 18);
+  context.roundRect(margin, sourceY, width - margin * 2, 265, 18);
   context.fill();
+  let panelY = sourceY + 34;
+  if (impact) {
+    context.fillStyle = accent;
+    context.font = "700 16px Arial, sans-serif";
+    context.fillText("COMPANY IMPACT · RESEARCH CONTEXT", margin + 24, panelY);
+    context.fillStyle = "#f2f4f4";
+    context.font = "700 18px Arial, sans-serif";
+    context.fillText(`${impact.ticker} · ${impact.direction.toUpperCase()} · ${impact.posture.toUpperCase()}`, margin + 24, panelY + 32);
+    context.fillStyle = "#aab6bb";
+    context.font = "400 15px Arial, sans-serif";
+    wrapCanvasText(context, impact.mechanism, margin + 24, panelY + 57, width - margin * 2 - 48, 19, 2);
+    panelY += 92;
+  }
   context.fillStyle = accent;
   context.font = "700 16px Arial, sans-serif";
-  context.fillText("CLIENT TAKEAWAY", margin + 24, sourceY + 34);
+  context.fillText("CLIENT TAKEAWAY", margin + 24, panelY);
   context.font = "700 15px Arial, sans-serif";
-  context.fillText("DO", margin + 24, sourceY + 70);
+  context.fillText("DO", margin + 24, panelY + 34);
   context.fillStyle = "#eef2f3";
   context.font = "400 16px Arial, sans-serif";
-  wrapCanvasText(context, guidance.do, margin + 70, sourceY + 70, width - margin * 2 - 100, 20, 1);
+  wrapCanvasText(context, guidance.do, margin + 70, panelY + 34, width - margin * 2 - 100, 20, 1);
   context.fillStyle = "#d8a879";
   context.font = "700 15px Arial, sans-serif";
-  context.fillText("DON'T", margin + 24, sourceY + 105);
+  context.fillText("DON'T", margin + 24, panelY + 67);
   context.fillStyle = "#eef2f3";
   context.font = "400 16px Arial, sans-serif";
-  wrapCanvasText(context, guidance.dont, margin + 90, sourceY + 105, width - margin * 2 - 120, 20, 1);
+  wrapCanvasText(context, guidance.dont, margin + 90, panelY + 67, width - margin * 2 - 120, 20, 1);
   context.fillStyle = "#9ba8ae";
   context.font = "600 14px Arial, sans-serif";
-  context.fillText(`Source: ${story.source.slice(0, 62)}`, margin + 24, sourceY + 144);
+  context.fillText(`Source: ${story.source.slice(0, 62)}`, margin + 24, sourceY + 221);
   const disclaimer = profile.disclaimer.length > 112 ? `${profile.disclaimer.slice(0, 109).trimEnd()}…` : profile.disclaimer;
   context.fillStyle = "#788990";
   context.font = "400 13px Arial, sans-serif";
-  context.fillText(disclaimer, margin + 24, sourceY + 181);
+  context.fillText(disclaimer, margin + 24, sourceY + 247);
 
   context.strokeStyle = accent;
   context.globalAlpha = .65;
@@ -1282,10 +1507,11 @@ function clientActionGuidance(story: Story) {
   return { do: "Verify the source and explain the wider context calmly.", dont: "Present one headline as a reason for immediate action." };
 }
 
-function buildClientNote(story: Story, profile: DistributorProfile, context: string) {
+function buildClientNote(story: Story, profile: DistributorProfile, context: string, impact: CompanyImpact | null = null) {
   const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
   const guidance = clientActionGuidance(story);
-  return `Hello,\n\n${story.title}\n\nIn short: ${context}\n\nWhat to do: ${guidance.do}\nWhat not to do: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nNo buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nDisclaimer: ${profile.disclaimer}`;
+  const marketReadThrough = impact ? `\n\nCompany Impact — ${impact.ticker}: ${impact.direction}. ${impact.mechanism}\nResearch posture: ${impact.posture}. What to verify: ${impact.verify}` : "";
+  return `Hello,\n\n${story.title}\n\nIn short: ${context}${marketReadThrough}\n\nWhat to do: ${guidance.do}\nWhat not to do: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. This is not a research recommendation or a buy/sell view. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}${profile.phone ? `\n${profile.phone}` : ""}\n\nDisclaimer: ${profile.disclaimer}`;
 }
 
 function conversationCue(story: Story) {
