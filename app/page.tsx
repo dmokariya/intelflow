@@ -29,11 +29,11 @@ type Story = {
   coverage: number;
 };
 
-type AppPage = "feed" | "saved" | "discover" | "pro" | "settings";
+type AppPage = "feed" | "saved" | "pro";
 type ProTab = "desk" | "studio" | "regulators" | "profile";
 type StudioTool = "note" | "image";
 
-const appPages: AppPage[] = ["feed", "saved", "discover", "pro", "settings"];
+const appPages: AppPage[] = ["feed", "saved", "pro"];
 const proTabs: ProTab[] = ["desk", "studio", "regulators", "profile"];
 
 type DistributorProfile = {
@@ -448,17 +448,27 @@ export default function Home() {
         <Brand />
         <span className="distributor-badge">BUILT FOR DISTRIBUTORS</span>
         <div className="top-actions">
-          <button className="icon-button" aria-label="Search" onClick={() => navigate("discover")}>⌕</button>
-          <button className="avatar-button" aria-label="Open menu" onClick={() => setMenuOpen((value) => !value)}>G</button>
+          <button className="avatar-button" aria-label="Open account and site menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>{profile.name?.trim().charAt(0).toUpperCase() || "IF"}</button>
         </div>
         {menuOpen && (
           <div className="profile-menu">
-            <strong>Guest distributor</strong>
-            <span>Your interests and trial progress stay on this device.</span>
-            <button onClick={() => navigate("settings")}>Settings</button>
+            <span className="profile-menu-label">YOUR INTELFLOW</span>
+            <strong>{profile.name || "Guest distributor"}</strong>
+            <span>Your preferences, profile and trial progress stay on this device.</span>
+            <button onClick={() => navigatePro("profile")}>Distributor profile</button>
+            <button className="profile-menu-secondary" onClick={() => { storage.set("intelflow:onboarded", false); setMenuOpen(false); setOnboarded(false); }}>Edit feed interests</button>
+            <div className="profile-menu-links">
+              <a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/disclosure">Disclosure</a><a href="/contact">Contact</a>
+            </div>
           </div>
         )}
       </header>
+
+      <nav className="primary-nav" aria-label="Primary navigation">
+        <button className={page === "feed" ? "active" : ""} onClick={() => navigate("feed")}><span>⌂</span>Briefing</button>
+        <button className={page === "saved" ? "active" : ""} onClick={() => navigate("saved")}><span>☆</span>Saved</button>
+        <button className={page === "pro" ? "active" : ""} onClick={() => navigate("pro")}><span>◆</span>Distributor Pro</button>
+      </nav>
 
       {page === "feed" && (
         <>
@@ -494,9 +504,7 @@ export default function Home() {
         </>
       )}
 
-      {page === "discover" && <Discover selected={selected} setSelected={setSelected} />}
       {page === "pro" && <DistributorPro stories={feedStories} trial={trial} setTrial={setTrial} profile={profile} setProfile={setProfile} initialStory={explainStory} tab={proTab} tool={studioTool} navigateTab={navigatePro} />}
-      {page === "settings" && <Settings selected={selected} trial={trial} reset={() => { storage.set("intelflow:onboarded", false); setOnboarded(false); }} />}
 
       {(page === "feed" || page === "saved") && (
         <section className="story-stage">
@@ -548,13 +556,6 @@ export default function Home() {
         </section>
       )}
 
-      <nav className="bottom-nav pro-nav" aria-label="Primary navigation">
-        <button className={page === "feed" ? "active" : ""} onClick={() => navigate("feed")}><span>⌂</span>Briefing</button>
-        <button className={page === "discover" ? "active" : ""} onClick={() => navigate("discover")}><span>⌕</span>Discover</button>
-        <button className={page === "saved" ? "active" : ""} onClick={() => navigate("saved")}><span>☆</span>Saved</button>
-        <button className={page === "pro" ? "active" : ""} onClick={() => navigate("pro")}><span>◆</span>Distributor</button>
-        <button className={page === "settings" ? "active" : ""} onClick={() => navigate("settings")}><span>☷</span>Settings</button>
-      </nav>
     </main>
   );
 }
@@ -565,25 +566,6 @@ function Brand() {
 
 function topicColor(tag: string) {
   return ({ AI: "#6550b8", India: "#bf563d", US: "#244d75", Markets: "#08745c", Economy: "#a16d20", Regulation: "#6e4d85", "Personal Finance": "#207a65", Energy: "#9a6b1f", Technology: "#256b91", Business: "#a66f1b", Startups: "#a94c7e", World: "#354a70", Science: "#277e86", Health: "#b44c65", Cricket: "#43763f", Sports: "#a9612a", Entertainment: "#87528d" } as Record<string, string>)[tag] || "#594b82";
-}
-
-function Discover({ selected, setSelected }: { selected: string[]; setSelected: (next: string[]) => void }) {
-  const [query, setQuery] = useState("");
-  const options = interests.filter(([tag, label]) => `${tag} ${label}`.toLowerCase().includes(query.toLowerCase()));
-  function toggle(tag: string) {
-    const next = selected.includes(tag) ? selected.filter((item) => item !== tag) : [...selected, tag];
-    setSelected(next);
-    storage.set("intelflow:interests", next);
-  }
-  return (
-    <section className="utility-page">
-      <span className="eyebrow">DISCOVER</span><h1>Shape your signal.</h1><p>Follow topics to tune what appears in your daily briefing.</p>
-      <label className="search-box"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search interests" /></label>
-      <div className="discover-grid">
-        {options.map(([tag, label, icon]) => <button key={tag} className={selected.includes(tag) ? "followed" : ""} onClick={() => toggle(tag)}><span>{icon}</span><strong>{label}</strong><i>{selected.includes(tag) ? "Following" : "Follow"}</i></button>)}
-      </div>
-    </section>
-  );
 }
 
 function selectMorningFive(stories: Story[]) {
@@ -622,7 +604,6 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 }) {
   const [studioStory, setStudioStory] = useState<Story | null>(initialStory);
   const [copied, setCopied] = useState(false);
-  const [copiedTool, setCopiedTool] = useState("");
   const [draft, setDraft] = useState("");
   const [ownedShares, setOwnedShares] = useState<OwnedShare[]>(() => storage.get(ownedSharesStorageKey, []));
   const [shareExpiry, setShareExpiry] = useState(30);
@@ -633,8 +614,6 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
     text: initialStory ? shortStoryContext(initialStory) : "",
     status: "fallback",
   });
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const [completedActions, setCompletedActions] = useState<string[]>(() => storage.get(`intelflow:pro-actions:${todayKey}`, []));
   const morningFive = selectMorningFive(stories);
   const practiceStories = stories.filter((story) => story.tags.some((tag) => ["Markets", "Regulation", "Personal Finance", "US", "Economy"].includes(tag))).slice(0, 6);
   const activeStudioStory = studioStory || stories[0] || demoStories[0];
@@ -643,12 +622,6 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   const studioStoryOptions = [activeStudioStory, ...stories.filter((story) => story.id !== activeStudioStory.id)].slice(0, 40);
   const trialStatus = getTrialStatus(trial);
   const trialProgress = trialStatus.locked ? "Trial complete" : [trialStatus.daysRemaining ? `${trialStatus.daysRemaining} day${trialStatus.daysRemaining === 1 ? "" : "s"} left` : "Time requirement complete", trialStatus.actionsRemaining ? `${trialStatus.actionsRemaining} output${trialStatus.actionsRemaining === 1 ? "" : "s"} left` : "Output allowance used"].join(" · ");
-  const dailyActions = ["Read the Morning 5", "Check official regulator updates", "Prepare one neutral client note", "Review pending follow-ups"];
-  const quickMessages = [
-    { title: "Market check-in", text: "Hello. Markets are moving today, but one session alone does not require an immediate portfolio change. Let me know if your goals, time horizon or liquidity needs have changed." },
-    { title: "Review reminder", text: "Hello. A periodic review helps us reconnect your investments with your goals and time horizon. Please share a convenient time; no action is implied by this message." },
-    { title: "Headline response", text: "This headline is useful context, not a buy or sell signal. I am reviewing the original source and the wider picture before drawing any conclusion." },
-  ];
   const regulatorAlerts = [
     { authority: "SEBI", title: "Review new circulars before client communication", time: "Watchlist · Today", level: "Action" },
     { authority: "AMFI", title: "Distributor guidance and operational updates", time: "Watchlist · Daily", level: "Monitor" },
@@ -776,37 +749,20 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
     navigateTab("studio", story, "image");
   }
 
-  function toggleAction(action: string) {
-    setCompletedActions((current) => {
-      const next = current.includes(action) ? current.filter((item) => item !== action) : [...current, action];
-      storage.set(`intelflow:pro-actions:${todayKey}`, next);
-      return next;
-    });
-  }
-
-  async function copyTool(title: string, text: string) {
-    if (!allowOutput()) return;
-    await navigator.clipboard?.writeText(text);
-    trackEvent("client_template_copied", { template_name: title });
-    recordTrialAction("quick_message_copied");
-    setCopiedTool(title);
-    window.setTimeout(() => setCopiedTool(""), 1600);
-  }
-
   if (!trial && tab !== "regulators") {
     return (
       <section className="pro-landing">
         <div className="pro-hero">
           <span className="pro-kicker">INTELFLOW DISTRIBUTOR PRO</span>
           <h1>Your morning intelligence desk.</h1>
-          <p>Save time every working day with a focused briefing, action checklist, official-source watch, practical conversation cues and ready-to-edit client messages.</p>
+          <p>Save time every working day with a focused briefing, official-source watch, practical conversation cues and ready-to-edit client content.</p>
           <div className="pro-price"><strong>₹399</strong><span>/ month<br />or ₹3,999 yearly</span></div>
           <button onClick={startTrial}>Start free local trial <span>→</span></button>
           <a className="trial-regulator-link" href="/?view=pro&tab=regulators">Browse free Regulator Watch ↗</a>
           <small>7 days and 10 client-content actions, whichever gives you longer. Trial controls stay on this device; branded links are hosted only when you choose to publish one. No payment or subscription.</small>
         </div>
         <div className="pro-feature-grid">
-          <article><span>01</span><strong>Action desk</strong><p>Morning 5 plus a daily checklist that keeps the working day moving.</p></article>
+          <article><span>01</span><strong>Morning 5</strong><p>The five market, business and regulatory signals most useful for today.</p></article>
           <article><span>02</span><strong>Practice feed</strong><p>Live stories converted into concise client-conversation angles.</p></article>
           <article><span>03</span><strong>Client content studio</strong><p>Turn one headline into a concise note or an attention-grabbing branded image.</p></article>
           <article><span>04</span><strong>Source + compliance kit</strong><p>Neutral starters, regulator links, attribution and review reminders in one workflow.</p></article>
@@ -823,40 +779,21 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
       </header>
       {trial && <div className={`trial-meter ${trialStatus.locked ? "locked" : ""}`}><div><span>LOCAL TRIAL</span><strong>{trialProgress}</strong></div><p>Usage is stored only on this browser. News and official regulator access remain free.</p></div>}
       {trialStatus.locked && <section className="trial-upgrade-banner"><div><span>CONTINUE WITH INTELFLOW PRO</span><h2>Your trial is complete.</h2><p>Client-content copying, image generation and exports are paused. The briefing and regulator sources remain available.</p></div><div><strong>₹399<small>/month</small></strong><a href="mailto:hello@swarnimcapital.com?subject=IntelFlow%20Pro%20early%20access" onClick={() => trackEvent("pro_upgrade_clicked", { placement: "trial_gate" })}>Request Pro access →</a><small>Early-access request only. No payment is collected here.</small></div></section>}
-      <div className="pro-value-strip"><span>YOUR DAILY VALUE</span><strong>5 signals</strong><i /> <strong>4 actions</strong><i /> <strong>3 ready messages</strong></div>
       <nav className="pro-tabs" aria-label="Distributor Pro sections">
-        <button className={tab === "desk" ? "active" : ""} onClick={() => navigateTab("desk")}>Daily workspace</button>
-        <button className={tab === "studio" ? "active" : ""} onClick={() => navigateTab("studio", activeStudioStory, tool)}>Client studio</button>
-        <button className={tab === "regulators" ? "active" : ""} onClick={() => navigateTab("regulators")}>Regulator watch</button>
+        <button className={tab === "desk" ? "active" : ""} onClick={() => navigateTab("desk")}>Today</button>
+        <button className={tab === "studio" ? "active" : ""} onClick={() => navigateTab("studio", activeStudioStory, tool)}>Client Studio</button>
+        <button className={tab === "regulators" ? "active" : ""} onClick={() => navigateTab("regulators")}>Regulators</button>
         <button className={tab === "profile" ? "active" : ""} onClick={() => navigateTab("profile")}>Profile</button>
       </nav>
 
       {tab === "desk" && <div className="unified-desk">
-        <div className="desk-action-grid">
-          <section className="daily-checklist">
-            <div className="pro-section-title"><div><span>TODAY’S ROUTINE</span><h2>Action checklist</h2></div><i>{completedActions.length}/{dailyActions.length}</i></div>
-            {dailyActions.map((action) => <button key={action} className={completedActions.includes(action) ? "done" : ""} onClick={() => toggleAction(action)}><span>{completedActions.includes(action) ? "✓" : ""}</span><strong>{action}</strong></button>)}
-            <p>Only checklist completion is stored locally. Do not enter client information.</p>
-          </section>
-          <section className="quick-message-kit">
-            <div className="pro-section-title"><div><span>ONE-TAP STARTERS</span><h2>Quick message kit</h2></div></div>
-            {quickMessages.map((message) => <article key={message.title}><strong>{message.title}</strong><p>{message.text}</p><button disabled={trialStatus.locked} onClick={() => void copyTool(message.title, message.text)}>{trialStatus.locked ? "Trial complete" : copiedTool === message.title ? "Copied ✓" : "Copy message"}</button></article>)}
-            <small>Edit and review every message before sending. These templates are neutral starting points, not investment advice.</small>
-          </section>
-        </div>
-        <div className="pro-desk-grid">
+        <div className="pro-desk-grid focused-desk">
           <section className="morning-five">
             <div className="pro-section-title"><div><span>6-MINUTE READ</span><h2>Morning 5</h2></div><i>{morningFive.length || 5}</i></div>
             {(morningFive.length ? morningFive : stories.slice(0, 5)).map((story, index) => <article key={story.id}>
               <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p><div className="morning-actions"><button onClick={() => openClientNote(story, "morning_five")}>Write note →</button><button onClick={() => openSocialCard(story, "morning_five")}>Create image →</button></div></div>
             </article>)}
           </section>
-          <aside className="regulator-watch">
-            <div className="pro-section-title"><div><span>OFFICIAL-SOURCE WATCHLIST</span><h2>Regulator watch</h2></div></div>
-            <p className="watch-disclaimer">A monitoring workspace—not a substitute for checking the regulator’s official website or professional compliance advice.</p>
-            {regulatorAlerts.map((alert) => <article key={alert.authority}><span>{alert.authority}</span><strong>{alert.title}</strong><small>{alert.time}</small><i>{alert.level}</i></article>)}
-            <OfficialRegulatorLinks />
-          </aside>
         </div>
         <div className="pro-tools-grid">
           <section className="practice-feed">
@@ -1368,26 +1305,4 @@ function OfficialRegulatorLinks() {
     ["PFRDA", "https://www.pfrda.org.in/"],
   ];
   return <div className="official-links">{regulators.map(([name, url]) => <a key={name} href={url} target="_blank" rel="noreferrer" onClick={() => trackEvent("regulator_link_opened", { regulator: name })}>{name} ↗</a>)}</div>;
-}
-
-function Settings({ selected, trial, reset }: { selected: string[]; trial: TrialState | null; reset: () => void }) {
-  const status = getTrialStatus(trial);
-  const trialLabel = !trial ? "Trial not started" : status.locked ? "Local trial complete" : `Local trial · day ${status.day} · ${trial.actions}/${trialActions} outputs`;
-  return (
-    <section className="utility-page settings-page">
-      <span className="eyebrow">SETTINGS</span><h1>Your IntelFlow.</h1><p>You’re browsing as a guest. Preferences and bookmarks are stored only on this device.</p>
-      <div className="settings-card">
-        <div><span>Current interests</span><strong>{selected.length} topics</strong></div>
-        <div><span>Language</span><strong>English</strong></div>
-        <div><span>Region</span><strong>India</strong></div>
-        <div><span>Account sync</span><strong>Coming later</strong></div>
-        <div><span>Distributor access</span><strong>{trialLabel}</strong></div>
-      </div>
-      <button className="reset-button" onClick={reset}>Choose interests again</button>
-      <div className="legal-links">
-        <a href="/daily">Daily signals</a><a href="/feed.xml">RSS feed</a><a href="/privacy">Privacy policy</a><a href="/terms">Terms of use</a><a href="/disclosure">News & summary disclosure</a><a href="/contact">Contact & grievance</a>
-      </div>
-      <p className="operator">IntelFlow is a product of Swarnim Capital.</p>
-    </section>
-  );
 }
