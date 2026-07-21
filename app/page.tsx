@@ -47,9 +47,12 @@ type DistributorProfile = {
 };
 
 type TrialState = { startedAt: number; actions: number };
+type ShareStats = { views: number; sourceClicks: number; contactClicks: number; expiresAt: number; revokedAt: number | null };
+type OwnedShare = { id: string; url: string; ownerToken: string; title: string; createdAt: number; expiresAt: number; stats?: ShareStats };
 const trialDays = 7;
 const trialActions = 10;
 const trialStorageKey = "intelflow:pro-trial";
+const ownedSharesStorageKey = "intelflow:owned-shares";
 
 function getTrialStatus(trial: TrialState | null) {
   if (!trial) return { locked: false, day: 0, daysRemaining: trialDays, actionsRemaining: trialActions };
@@ -621,6 +624,9 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   const [copied, setCopied] = useState(false);
   const [copiedTool, setCopiedTool] = useState("");
   const [draft, setDraft] = useState("");
+  const [ownedShares, setOwnedShares] = useState<OwnedShare[]>(() => storage.get(ownedSharesStorageKey, []));
+  const [shareExpiry, setShareExpiry] = useState(30);
+  const [noteShareStatus, setNoteShareStatus] = useState("");
   const contextCache = useRef(new Map<string, string>());
   const [articleContext, setArticleContext] = useState<{ storyId: number; text: string; status: "loading" | "article" | "fallback" }>({
     storyId: initialStory?.id || 0,
@@ -713,6 +719,19 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
     storage.set("intelflow:distributor-profile", next);
   }
 
+  function saveOwnedShare(share: OwnedShare) {
+    setOwnedShares((current) => {
+      const next = [share, ...current.filter((item) => item.id !== share.id)];
+      storage.set(ownedSharesStorageKey, next);
+      return next;
+    });
+  }
+
+  function replaceOwnedShares(next: OwnedShare[]) {
+    setOwnedShares(next);
+    storage.set(ownedSharesStorageKey, next);
+  }
+
   useEffect(() => {
     setDraft(buildClientNote(activeStudioStory, profile, resolvedArticleContext));
   }, [activeStudioStory, profile, resolvedArticleContext]);
@@ -724,6 +743,25 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
     recordTrialAction("client_note_copied");
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  async function createNoteShare() {
+    if (!allowOutput()) return;
+    setNoteShareStatus("Creating your branded link…");
+    try {
+      const canvas = document.createElement("canvas");
+      const template: SocialTemplate = activeStudioStory.tags.includes("Regulation") ? "regulatory" : activeStudioStory.tags.includes("Markets") ? "market" : "signal";
+      await renderSocialCard(canvas, { story: activeStudioStory, headline: activeStudioStory.title, context: resolvedArticleContext, profile, format: "square", template });
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("Preview image could not be created.");
+      const share = await publishHostedShare(activeStudioStory, resolvedArticleContext, profile, blob, shareExpiry);
+      saveOwnedShare(share);
+      recordTrialAction("share_link_created");
+      trackEvent("share_link_created", { item_id: String(activeStudioStory.id), expires_in_days: shareExpiry, format: "written" });
+      setNoteShareStatus("Branded link created. Copy or open it below.");
+    } catch (error) {
+      setNoteShareStatus(error instanceof Error ? error.message : "The share link could not be created.");
+    }
   }
 
   function openClientNote(story: Story, entryPoint: string) {
@@ -765,7 +803,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
           <div className="pro-price"><strong>₹399</strong><span>/ month<br />or ₹3,999 yearly</span></div>
           <button onClick={startTrial}>Start free local trial <span>→</span></button>
           <a className="trial-regulator-link" href="/?view=pro&tab=regulators">Browse free Regulator Watch ↗</a>
-          <small>7 days and 10 client-content actions, whichever gives you longer. Device-local preview only—no payment or subscription.</small>
+          <small>7 days and 10 client-content actions, whichever gives you longer. Trial controls stay on this device; branded links are hosted only when you choose to publish one. No payment or subscription.</small>
         </div>
         <div className="pro-feature-grid">
           <article><span>01</span><strong>Action desk</strong><p>Morning 5 plus a daily checklist that keeps the working day moving.</p></article>
@@ -838,8 +876,8 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 
       {tab === "studio" && <section className="client-content-studio">
         <header className="content-studio-hero">
-          <div><span className="pro-kicker">ONE HEADLINE · TWO READY OUTPUTS</span><h2>Turn news into client-ready content.</h2><p>Write a short, neutral explanation or create a branded social image—without uploading client or profile data.</p></div>
-          <strong>LOCAL · NO AI COST</strong>
+          <div><span className="pro-kicker">ONE HEADLINE · THREE READY OUTPUTS</span><h2>Turn news into client-ready content.</h2><p>Write a neutral note, create a social image, or publish an expiring branded link to the original source. No client data is collected.</p></div>
+          <strong>NO PAID AI</strong>
         </header>
         <div className="content-studio-toolbar">
           <label><span>Selected headline</span><select value={activeStudioStory.id} onChange={(event) => { const next = studioStoryOptions.find((story) => String(story.id) === event.target.value); if (next) { setStudioStory(next); navigateTab("studio", next, tool); } }}>{studioStoryOptions.map((story) => <option key={story.id} value={story.id}>{story.title}</option>)}</select></label>
@@ -857,9 +895,12 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
           <div className="content-note-compose">
             <div className="content-note-head"><div><span className="pro-kicker">SHORT · ATTRIBUTED · NEUTRAL</span><h3>Editable client note</h3></div><button className="copy-note" disabled={trialStatus.locked} onClick={() => void copyNote()}>{trialStatus.locked ? "Trial complete" : copied ? "Copied ✓" : "Copy note"}</button></div>
             <textarea className="editable-note" aria-label="Editable client message" value={draft} onChange={(event) => setDraft(event.target.value)} />
+            <div className="hosted-share-creator"><div><span>BRANDED SOURCE LINK</span><strong>Publish this context as an expiring IntelFlow page.</strong><small>Your selected profile details, disclaimer and preview image become public on the link. No client details are collected.</small></div><label>Expires<select value={shareExpiry} onChange={(event) => setShareExpiry(Number(event.target.value))}><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></label><button type="button" disabled={trialStatus.locked} onClick={() => void createNoteShare()}>{trialStatus.locked ? "Trial complete" : "Create share link"}</button></div>
+            {noteShareStatus && <p className="studio-status" role="status">{noteShareStatus}</p>}
             <p className="compliance-note"><strong>Before sending:</strong> review accuracy, suitability, source context and your organisation’s compliance policy. IntelFlow does not approve communications or provide investment advice.</p>
           </div>
-        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} initialContext={resolvedArticleContext} embedded trialLocked={trialStatus.locked} onTrialAction={recordTrialAction} onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
+        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} initialContext={resolvedArticleContext} embedded trialLocked={trialStatus.locked} onTrialAction={recordTrialAction} onShareCreated={saveOwnedShare} onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
+        <ShareLinkDashboard links={ownedShares} onChange={replaceOwnedShares} />
       </section>}
 
       {tab === "regulators" && <section className="regulator-page regulator-watch">
@@ -870,7 +911,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
       </section>}
 
       {tab === "profile" && <form className="profile-editor" onSubmit={(event) => event.preventDefault()}>
-        <div><span className="pro-kicker">DISTRIBUTOR IDENTITY</span><h2>Your client-note footer.</h2><p>Saved only in this browser during the preview. Do not enter client data.</p></div>
+        <div><span className="pro-kicker">DISTRIBUTOR IDENTITY</span><h2>Your client-note footer.</h2><p>Saved in this browser. The displayed identity is published only when you deliberately create a branded share link. Do not enter client data.</p></div>
         <label>Registered name<input value={profile.name} onChange={(event) => saveProfile({ ...profile, name: event.target.value })} placeholder="Your registered distributor name" /></label>
         <div className="profile-row"><label>ARN<input value={profile.arn} onChange={(event) => saveProfile({ ...profile, arn: event.target.value })} placeholder="ARN-000000" /></label><label>EUIN<input value={profile.euin} onChange={(event) => saveProfile({ ...profile, euin: event.target.value })} placeholder="E000000" /></label></div>
         <label>Business phone<input value={profile.phone} onChange={(event) => saveProfile({ ...profile, phone: event.target.value })} placeholder="Optional" /></label>
@@ -884,7 +925,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 type SocialFormat = "square" | "portrait";
 type SocialTemplate = "signal" | "market" | "regulatory";
 
-function SocialPostStudio({ stories, profile, saveProfile, initialStory, initialContext, onStoryChange, onTrialAction, trialLocked = false, embedded = false }: {
+function SocialPostStudio({ stories, profile, saveProfile, initialStory, initialContext, onStoryChange, onTrialAction, onShareCreated, trialLocked = false, embedded = false }: {
   stories: Story[];
   profile: DistributorProfile;
   saveProfile: (next: DistributorProfile) => void;
@@ -892,6 +933,7 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
   initialContext: string;
   onStoryChange: (story: Story) => void;
   onTrialAction: (action: string) => void;
+  onShareCreated: (share: OwnedShare) => void;
   trialLocked?: boolean;
   embedded?: boolean;
 }) {
@@ -902,6 +944,7 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
   const [context, setContext] = useState(shortStoryContext(firstStory));
   const [format, setFormat] = useState<SocialFormat>("square");
   const [template, setTemplate] = useState<SocialTemplate>("signal");
+  const [shareExpiry, setShareExpiry] = useState(30);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -1002,6 +1045,22 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
     setStatus("Caption copied.");
   }
 
+  async function createHostedLink() {
+    if (trialLocked) return;
+    setStatus("Creating your branded link…");
+    try {
+      const blob = await makeBlob();
+      if (!blob) throw new Error("Preview image could not be created.");
+      const share = await publishHostedShare({ ...story, title: headline }, context, profile, blob, shareExpiry);
+      onShareCreated(share);
+      onTrialAction("share_link_created");
+      trackEvent("share_link_created", { item_id: String(story.id), expires_in_days: shareExpiry, format: "social" });
+      setStatus("Branded link created. Copy or open it in Recent share links below.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "The share link could not be created.");
+    }
+  }
+
   return <section className="social-studio">
     {!embedded && <header className="studio-intro"><div><span className="pro-kicker">NO-AI · LOCAL CREATION</span><h2>Social Post Studio</h2><p>Create a branded, attributed card on this device. Review every post before sharing.</p></div><strong>PRO TOOL</strong></header>}
     <div className="studio-layout">
@@ -1015,11 +1074,106 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
       </div>
       <div className="studio-preview">
         <div className={`canvas-frame ${format}`}><canvas ref={canvasRef} aria-label="Generated social post preview" /></div>
-        <div className="studio-actions"><button type="button" disabled={trialLocked} onClick={() => void generateCard()}>{trialLocked ? "Trial complete" : "Generate card"}</button><button type="button" className="primary" disabled={trialLocked} onClick={() => void shareCard()}>Share to WhatsApp</button><button type="button" disabled={trialLocked} onClick={() => void downloadCard()}>Download PNG</button><button type="button" disabled={trialLocked} onClick={() => void copyCaption()}>Copy caption</button></div>
+        <div className="studio-actions"><button type="button" disabled={trialLocked} onClick={() => void generateCard()}>{trialLocked ? "Trial complete" : "Generate card"}</button><button type="button" className="primary" disabled={trialLocked} onClick={() => void shareCard()}>Share image</button><button type="button" disabled={trialLocked} onClick={() => void downloadCard()}>Download PNG</button><button type="button" disabled={trialLocked} onClick={() => void copyCaption()}>Copy caption</button></div>
+        <div className="social-link-publisher"><label>Link expires<select value={shareExpiry} onChange={(event) => setShareExpiry(Number(event.target.value))}><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></label><button type="button" disabled={trialLocked} onClick={() => void createHostedLink()}>{trialLocked ? "Trial complete" : "Create branded source link →"}</button></div>
         {status && <p className="studio-status" role="status">{status}</p>}
-        <p className="studio-disclaimer">Sharing opens the phone’s native share sheet when file sharing is supported. No image, logo or profile information is uploaded to IntelFlow.</p>
+        <p className="studio-disclaimer">Image sharing stays on this device. Creating a branded source link publishes the displayed profile identity, disclaimer and preview image until it expires or you revoke it.</p>
       </div>
     </div>
+  </section>;
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Preview image could not be prepared."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function publishHostedShare(story: Story, context: string, profile: DistributorProfile, image: Blob, expiresInDays: number) {
+  const guidance = clientActionGuidance(story);
+  const response = await fetch("/api/shares", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      story: { title: story.title, context, actionDo: guidance.do, actionDont: guidance.dont, sourceName: story.source, sourceUrl: story.sourceUrl },
+      profile: { name: profile.name, arn: profile.arn, euin: profile.euin, phone: profile.phone, disclaimer: profile.disclaimer, brandColor: profile.brandColor },
+      expiresInDays,
+      previewImageData: await blobToDataUrl(image),
+    }),
+  });
+  const result = await response.json() as { share?: OwnedShare; error?: string };
+  if (!response.ok || !result.share) throw new Error(result.error || "The share link could not be created.");
+  return result.share;
+}
+
+function ShareLinkDashboard({ links, onChange }: { links: OwnedShare[]; onChange: (next: OwnedShare[]) => void }) {
+  const [confirmId, setConfirmId] = useState("");
+  const [status, setStatus] = useState("");
+  const linkIds = links.map((link) => link.id).join(",");
+
+  async function refreshStats() {
+    if (!links.length) return;
+    const next = await Promise.all(links.map(async (link) => {
+      try {
+        const response = await fetch(`/api/shares/${link.id}/stats`, { headers: { Authorization: `Bearer ${link.ownerToken}` }, cache: "no-store" });
+        if (!response.ok) return link;
+        const result = await response.json() as { stats?: ShareStats };
+        return result.stats ? { ...link, stats: result.stats } : link;
+      } catch {
+        return link;
+      }
+    }));
+    onChange(next);
+  }
+
+  useEffect(() => {
+    void refreshStats();
+  }, [linkIds]);
+
+  async function revokeLink(link: OwnedShare) {
+    if (confirmId !== link.id) {
+      setConfirmId(link.id);
+      setStatus("Press Confirm revoke to withdraw this public link.");
+      return;
+    }
+    const response = await fetch(`/api/shares/${link.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${link.ownerToken}` } });
+    if (!response.ok) {
+      setStatus("The link could not be revoked from this device.");
+      return;
+    }
+    onChange(links.map((item) => item.id === link.id ? { ...item, stats: { views: item.stats?.views || 0, sourceClicks: item.stats?.sourceClicks || 0, contactClicks: item.stats?.contactClicks || 0, expiresAt: item.expiresAt, revokedAt: Date.now() } } : item));
+    setConfirmId("");
+    setStatus("Share link revoked. Its public page and preview image are no longer available.");
+    trackEvent("share_link_revoked", { share_id: link.id });
+  }
+
+  async function shareLink(link: OwnedShare) {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: link.title, url: link.url });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+    await navigator.clipboard?.writeText(link.url);
+    setStatus("Share link copied.");
+  }
+
+  const activeLinks = links.filter((link) => !link.stats?.revokedAt && link.expiresAt > Date.now());
+  const totals = activeLinks.reduce((sum, link) => ({ views: sum.views + (link.stats?.views || 0), clicks: sum.clicks + (link.stats?.sourceClicks || 0), contacts: sum.contacts + (link.stats?.contactClicks || 0) }), { views: 0, clicks: 0, contacts: 0 });
+  return <section className="share-link-dashboard">
+    <div className="share-dashboard-head"><div><span className="pro-kicker">PUBLIC · EXPIRING · REVOCABLE</span><h3>Recent share links</h3><p>Only aggregate actions are counted. IntelFlow does not store visitor identities, messages or client details.</p></div><button type="button" onClick={() => void refreshStats()}>Refresh activity</button></div>
+    <div className="share-metrics"><div><strong>{activeLinks.length}</strong><span>Active links</span></div><div><strong>{totals.views}</strong><span>Page views</span></div><div><strong>{totals.clicks}</strong><span>Source opens</span></div><div><strong>{totals.contacts}</strong><span>Discuss clicks</span></div></div>
+    {!links.length ? <p className="share-empty">Create a branded source link from the written-note or social-image workspace. Its private owner key stays only in this browser.</p> : <div className="owned-share-list">{links.slice(0, 8).map((link) => {
+      const revoked = Boolean(link.stats?.revokedAt);
+      const expired = link.expiresAt <= Date.now();
+      return <article key={link.id} className={revoked || expired ? "inactive" : ""}><div><span>{revoked ? "REVOKED" : expired ? "EXPIRED" : `ACTIVE · ${new Date(link.expiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`}</span><strong>{link.title}</strong><small>{link.stats?.views || 0} views · {link.stats?.sourceClicks || 0} source opens · {link.stats?.contactClicks || 0} discuss clicks</small></div><div>{!revoked && !expired && <><a href={link.url} target="_blank" rel="noreferrer">Open</a><button type="button" onClick={() => void shareLink(link)}>Share</button><button type="button" className={confirmId === link.id ? "confirm" : "revoke"} onClick={() => void revokeLink(link)}>{confirmId === link.id ? "Confirm revoke" : "Revoke"}</button></>}</div></article>;
+    })}</div>}
+    {status && <p className="studio-status" role="status">{status}</p>}
   </section>;
 }
 
