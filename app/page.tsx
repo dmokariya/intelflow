@@ -108,7 +108,7 @@ const defaultDistributorProfile: DistributorProfile = {
   euin: "",
   phone: "",
   disclaimer: "Mutual fund investments are subject to market risks. Read all scheme-related documents carefully.",
-  brandColor: "#d0aa65",
+  brandColor: "#5b4df5",
   logo: "",
 };
 
@@ -1095,7 +1095,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 
         <details className="dashboard-secondary-tools"><summary><div><span className="pro-kicker">MORE INTELLIGENCE</span><strong>Conversation cues and verified social sources</strong></div><i>Open ＋</i></summary><div className="pro-tools-grid"><section className="practice-feed"><div className="pro-section-title"><div><span>LIVE RSS · PRACTICE EDGE</span><h2>Conversation cues</h2></div><i className="live-dot">LIVE</i></div>{(practiceStories.length ? practiceStories : stories.slice(0, 6)).map((story) => <article key={story.id}><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><p><strong>Try this:</strong> {conversationCue(story)}</p><div><a href={story.sourceUrl} target="_blank" rel="noreferrer">Open source ↗</a><button onClick={() => openQuickDrawer(story, "note")}>Use story →</button></div></article>)}</section><aside className="x-source-watch"><span className="pro-kicker">VERIFIED SOCIAL SOURCES</span><h2>Useful source channels.</h2><p>Fast awareness only. Verify regulatory information on the authority’s website.</p><a href="https://x.com/SEBI_updates" target="_blank" rel="noreferrer"><strong>@SEBI_updates</strong><span>Regulations and circulars ↗</span></a><a href="https://x.com/RBI" target="_blank" rel="noreferrer"><strong>@RBI</strong><span>Reserve Bank updates ↗</span></a><a href="https://x.com/MFSahiHai" target="_blank" rel="noreferrer"><strong>@MFSahiHai</strong><span>Mutual fund education ↗</span></a></aside></div></details>
 
-        {quickDrawer && <div className="quick-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickDrawer(null); }}><aside className="quick-drawer" role="dialog" aria-modal="true" aria-label="Quick create"><header><div><span className="pro-kicker">QUICK CREATE</span><strong>{quickDrawer.story.title}</strong><small>{quickDrawer.story.source} · {quickDrawer.story.age}</small></div><button type="button" onClick={() => setQuickDrawer(null)} aria-label="Close quick create">×</button></header><nav><button type="button" className={quickDrawer.tool === "note" ? "active" : ""} onClick={() => setQuickDrawer({ ...quickDrawer, tool: "note" })}>Written note</button><button type="button" className={quickDrawer.tool === "image" ? "active" : ""} onClick={() => setQuickDrawer({ ...quickDrawer, tool: "image" })}>Social image</button></nav>{quickDrawer.tool === "note" ? <div className="quick-note"><label>Editable client note<textarea value={quickDraft} onChange={(event) => setQuickDraft(event.target.value)} /></label><div><button type="button" className="primary" disabled={trialStatus.locked} onClick={() => void copyQuickNote()}>Copy note</button><button type="button" onClick={() => { setQuickDrawer(null); navigateTab("studio", quickDrawer.story, "note"); }}>Full editor →</button></div></div> : <div className="quick-image"><div><span>{quickDrawer.story.tags.slice(0, 2).join(" · ")}</span><strong>{quickDrawer.story.title}</strong><p>{shortStoryContext(quickDrawer.story)}</p><small>CLIENT ACTION · STAY WITH THE AGREED PLAN</small></div><button type="button" className="primary" disabled={trialStatus.locked} onClick={() => void shareQuickImage()}>Generate and share image</button><button type="button" onClick={() => { setQuickDrawer(null); navigateTab("studio", quickDrawer.story, "image"); }}>Open design studio →</button></div>}{quickStatus && <p className="quick-status" role="status">{quickStatus}</p>}<footer>Source attribution and your local distributor disclaimer remain included. Review before sharing.</footer></aside></div>}
+        {quickDrawer && <div className="quick-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickDrawer(null); }}><aside className="quick-drawer" role="dialog" aria-modal="true" aria-label="Quick create"><header><div><span className="pro-kicker">QUICK CREATE</span><strong>{quickDrawer.story.title}</strong><small>{quickDrawer.story.source} · {quickDrawer.story.age}</small></div><button type="button" onClick={() => setQuickDrawer(null)} aria-label="Close quick create">×</button></header><nav><button type="button" className={quickDrawer.tool === "note" ? "active" : ""} onClick={() => setQuickDrawer({ ...quickDrawer, tool: "note" })}>Written note</button><button type="button" className={quickDrawer.tool === "image" ? "active" : ""} onClick={() => setQuickDrawer({ ...quickDrawer, tool: "image" })}>Social image</button></nav>{quickDrawer.tool === "note" ? <div className="quick-note"><label>Editable client note<textarea value={quickDraft} onChange={(event) => setQuickDraft(event.target.value)} /></label><button type="button" className="primary quick-single-action" disabled={trialStatus.locked} onClick={() => void copyQuickNote()}>Copy client note</button></div> : <div className="quick-image"><div><span>{quickDrawer.story.tags.slice(0, 2).join(" · ")}</span><strong>{quickDrawer.story.title}</strong><p>{shortStoryContext(quickDrawer.story)}</p><small>CLIENT ACTION · STAY WITH THE AGREED PLAN</small></div><button type="button" className="primary" disabled={trialStatus.locked} onClick={() => void shareQuickImage()}>Share image</button></div>}{quickStatus && <p className="quick-status" role="status">{quickStatus}</p>}<footer>Source attribution and your local distributor disclaimer remain included. Review before sharing.</footer></aside></div>}
       </div>}
 
       {tab === "studio" && <section className="client-content-studio">
@@ -1128,7 +1128,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
             {noteShareStatus && <p className="studio-status" role="status">{noteShareStatus}</p>}
             <p className="compliance-note"><strong>Before sending:</strong> review accuracy, suitability, source context and your organisation’s compliance policy. IntelFlow does not approve communications or provide investment advice.</p>
           </div>
-        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} initialContext={resolvedArticleContext} impact={includeCompanyImpact ? activeCompanyImpact : null} embedded trialLocked={trialStatus.locked} onTrialAction={recordTrialAction} onShareCreated={saveOwnedShare} onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
+        </div> : <SocialPostStudio stories={stories} profile={profile} saveProfile={saveProfile} initialStory={activeStudioStory} initialContext={resolvedArticleContext} impact={includeCompanyImpact ? activeCompanyImpact : null} embedded trialLocked={trialStatus.locked} onTrialAction={recordTrialAction} onStoryChange={(story) => { setStudioStory(story); navigateTab("studio", story, "image"); }} />}
         <ShareLinkDashboard links={ownedShares} onChange={replaceOwnedShares} />
       </section>}
 
@@ -1151,7 +1151,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 type SocialFormat = "square" | "portrait";
 type SocialTemplate = "signal" | "market" | "regulatory" | "festival";
 
-function SocialPostStudio({ stories, profile, saveProfile, initialStory, initialContext, impact, onStoryChange, onTrialAction, onShareCreated, trialLocked = false, embedded = false }: {
+function SocialPostStudio({ stories, profile, saveProfile, initialStory, initialContext, impact, onStoryChange, onTrialAction, trialLocked = false, embedded = false }: {
   stories: Story[];
   profile: DistributorProfile;
   saveProfile: (next: DistributorProfile) => void;
@@ -1160,7 +1160,6 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
   impact: CompanyImpact | null;
   onStoryChange: (story: Story) => void;
   onTrialAction: (action: string) => void;
-  onShareCreated: (share: OwnedShare) => void;
   trialLocked?: boolean;
   embedded?: boolean;
 }) {
@@ -1169,10 +1168,9 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
   const [story, setStory] = useState<Story>(firstStory);
   const [headline, setHeadline] = useState(firstStory.title);
   const [context, setContext] = useState(shortStoryContext(firstStory));
-  const [format, setFormat] = useState<SocialFormat>("square");
-  const [template, setTemplate] = useState<SocialTemplate>("signal");
-  const [shareExpiry, setShareExpiry] = useState(30);
   const [status, setStatus] = useState("");
+  const format: SocialFormat = "square";
+  const template: SocialTemplate = story.tags.includes("Regulation") ? "regulatory" : story.tags.includes("Markets") ? "market" : "signal";
 
   useEffect(() => {
     if (!initialStory) return;
@@ -1197,22 +1195,6 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
     onStoryChange(next);
   }
 
-  function applyCommunityPreset(preset: "update" | "festival") {
-    if (preset === "festival") {
-      setTemplate("festival");
-      setHeadline(`Warm wishes from ${profile.name || "IntelFlow"}`);
-      setContext("Wishing you and your family happiness, good health and prosperity. Thank you for being part of our community.");
-      setStatus("Festive greeting ready—edit the message and branding before sharing.");
-      trackEvent("community_pack_preset", { preset: "festival" });
-      return;
-    }
-    setTemplate(story.tags.includes("Regulation") ? "regulatory" : story.tags.includes("Markets") ? "market" : "signal");
-    setHeadline(story.title);
-    setContext(initialContext || shortStoryContext(story));
-    setStatus("News update restored from the selected headline.");
-    trackEvent("community_pack_preset", { preset: "news_update" });
-  }
-
   function uploadLogo(file?: File) {
     if (!file) return;
     if (!file.type.startsWith("image/") || file.size > 1_000_000) {
@@ -1229,7 +1211,6 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
 
   function buildCaption() {
     const identity = [profile.name, profile.arn, profile.euin].filter(Boolean).join(" · ");
-    if (template === "festival") return `${headline}\n\n${context}${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
     const guidance = clientActionGuidance(story);
     const marketReadThrough = impact ? `\n\nCompany Impact: ${impactSummary(impact)}\nResearch posture: ${impact.posture}. Verify: ${impact.verify}` : "";
     return `${headline}\n\n${context}${marketReadThrough}\n\nWhat you can do: ${guidance.do}\nWhat to avoid: ${guidance.dont}\n\nSource: ${story.source}\n${story.sourceUrl}\n\nFor information only. No buy/sell view or research recommendation. One headline alone does not call for an immediate portfolio change.${identity ? `\n\n${identity}` : ""}\n\n${profile.disclaimer}`;
@@ -1239,14 +1220,6 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
     if (!canvasRef.current) return null;
     await renderSocialCard(canvasRef.current, { story, headline, context, profile, format, template, impact });
     return new Promise<Blob | null>((resolve) => canvasRef.current?.toBlob(resolve, "image/png"));
-  }
-
-  async function generateCard() {
-    if (trialLocked) return;
-    const blob = await makeBlob();
-    if (!blob) return;
-    trackEvent("social_card_generated", { item_id: String(story.id), format, template });
-    setStatus("Card ready to share or download.");
   }
 
   async function shareCard() {
@@ -1265,46 +1238,10 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
       downloadSocialCard(blob, file.name);
       trackEvent("social_card_downloaded", { item_id: String(story.id), format, fallback: true });
       onTrialAction("social_card_downloaded");
-      setStatus("Image downloaded. Attach it in WhatsApp with the copied caption.");
+      setStatus("Image downloaded and ready to attach in WhatsApp.");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setStatus("Sharing is unavailable here. Use Download PNG instead.");
-    }
-  }
-
-  async function downloadCard() {
-    if (trialLocked) return;
-    const blob = await makeBlob();
-    if (!blob) return;
-    downloadSocialCard(blob, `intelflow-${story.id}-${format}.png`);
-    trackEvent("social_card_downloaded", { item_id: String(story.id), format, fallback: false });
-    onTrialAction("social_card_downloaded");
-    setStatus("PNG downloaded.");
-  }
-
-  async function copyCaption() {
-    if (trialLocked) return;
-    await navigator.clipboard?.writeText(buildCaption());
-    trackEvent("social_caption_copied", { item_id: String(story.id) });
-    onTrialAction("social_caption_copied");
-    setStatus("Caption copied.");
-  }
-
-  async function createHostedLink() {
-    if (trialLocked) return;
-    setStatus("Creating your branded link…");
-    try {
-      const blob = await makeBlob();
-      if (!blob) throw new Error("Preview image could not be created.");
-      const shareContext = impact && template !== "festival" ? `${context} Market read-through: ${impactSummary(impact)}` : context;
-      const publishedStory = template === "festival" ? { ...story, title: headline, source: "IntelFlow Community Pack", sourceUrl: "https://intelflow.in", tags: ["Community"] } : { ...story, title: headline };
-      const share = await publishHostedShare(publishedStory, shareContext, profile, blob, shareExpiry);
-      onShareCreated(share);
-      onTrialAction("share_link_created");
-      trackEvent("share_link_created", { item_id: String(story.id), expires_in_days: shareExpiry, format: "social" });
-      setStatus("Branded link created. Copy or open it in Recent share links below.");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "The share link could not be created.");
+      setStatus("Sharing is unavailable here. Please try again from a supported browser.");
     }
   }
 
@@ -1313,19 +1250,15 @@ function SocialPostStudio({ stories, profile, saveProfile, initialStory, initial
     <div className="studio-layout">
       <div className="studio-controls">
         {!embedded && <label>Story<select value={story.id} onChange={(event) => { const next = stories.find((item) => String(item.id) === event.target.value); if (next) chooseStory(next); }}>{stories.slice(0, 20).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>}
-        <div className="community-pack"><span>COMMUNITY PACK</span><strong>Post something useful in two clicks.</strong><p>Use today’s selected update or create an editable festive greeting with your local branding.</p><div><button type="button" onClick={() => applyCommunityPreset("update")}>News update</button><button type="button" onClick={() => applyCommunityPreset("festival")}>Festive greeting</button></div></div>
-        <fieldset><legend>Template</legend><div className="studio-options">{(["signal", "market", "regulatory", "festival"] as SocialTemplate[]).map((item) => <button type="button" key={item} className={template === item ? "active" : ""} onClick={() => setTemplate(item)}>{item === "signal" ? "Daily signal" : item === "market" ? "Market brief" : item === "regulatory" ? "Regulatory" : "Greeting"}</button>)}</div></fieldset>
-        <fieldset><legend>Format</legend><div className="studio-options"><button type="button" className={format === "square" ? "active" : ""} onClick={() => setFormat("square")}>Square · 1080</button><button type="button" className={format === "portrait" ? "active" : ""} onClick={() => setFormat("portrait")}>Portrait · 1350</button></div></fieldset>
         <label>Headline<textarea value={headline} maxLength={130} rows={3} onChange={(event) => setHeadline(event.target.value)} /></label>
         <label>Short context<textarea value={context} maxLength={220} rows={4} onChange={(event) => setContext(event.target.value)} /></label>
-        <div className="studio-branding"><span className="pro-kicker">YOUR BRANDING</span><label>Brand colour<input type="color" value={profile.brandColor || "#d0aa65"} onChange={(event) => saveProfile({ ...profile, brandColor: event.target.value })} /></label><label className="logo-upload">Logo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => uploadLogo(event.target.files?.[0])} /><span>{profile.logo ? "Replace logo" : "Upload logo"}</span></label>{profile.logo && <button type="button" onClick={() => saveProfile({ ...profile, logo: "" })}>Remove logo</button>}<small>Name, ARN and EUIN come from your local Distributor Profile.</small></div>
+        <div className="studio-branding"><span className="pro-kicker">YOUR BRANDING</span><label>Brand colour<input type="color" value={profile.brandColor || "#5b4df5"} onChange={(event) => saveProfile({ ...profile, brandColor: event.target.value })} /></label><label className="logo-upload">Logo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => uploadLogo(event.target.files?.[0])} /><span>{profile.logo ? "Replace logo" : "Upload logo"}</span></label>{profile.logo && <button type="button" onClick={() => saveProfile({ ...profile, logo: "" })}>Remove logo</button>}<small>Name, ARN and EUIN come from your local Distributor Profile.</small></div>
       </div>
       <div className="studio-preview">
         <div className={`canvas-frame ${format}`}><canvas ref={canvasRef} aria-label="Generated social post preview" /></div>
-        <div className="studio-actions"><button type="button" disabled={trialLocked} onClick={() => void generateCard()}>{trialLocked ? "Trial complete" : "Generate card"}</button><button type="button" className="primary" disabled={trialLocked} onClick={() => void shareCard()}>Share image</button><button type="button" disabled={trialLocked} onClick={() => void downloadCard()}>Download PNG</button><button type="button" disabled={trialLocked} onClick={() => void copyCaption()}>Copy caption</button></div>
-        <div className="social-link-publisher"><label>Link expires<select value={shareExpiry} onChange={(event) => setShareExpiry(Number(event.target.value))}><option value={7}>7 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></label><button type="button" disabled={trialLocked} onClick={() => void createHostedLink()}>{trialLocked ? "Trial complete" : "Create short share link →"}</button></div>
+        <div className="studio-actions single-action"><button type="button" className="primary" disabled={trialLocked} onClick={() => void shareCard()}>{trialLocked ? "Trial complete" : "Share image"}</button></div>
         {status && <p className="studio-status" role="status">{status}</p>}
-        <p className="studio-disclaimer">Image sharing stays on this device. Creating a branded source link publishes the displayed profile identity, disclaimer and preview image until it expires or you revoke it.</p>
+        <p className="studio-disclaimer">The image is created locally with source attribution, your saved branding and compliance disclaimer. Review it before sharing.</p>
       </div>
     </div>
   </section>;
@@ -1477,30 +1410,21 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   canvas.height = height;
   const context = canvas.getContext("2d");
   if (!context) return;
-  const accent = profile.brandColor || "#d0aa65";
+  const accent = profile.brandColor || "#5b4df5";
   const guidance = clientActionGuidance(story);
-  const backgrounds: Record<SocialTemplate, [string, string]> = { signal: ["#08121a", "#112839"], market: ["#071a18", "#12352e"], regulatory: ["#15101b", "#302037"], festival: ["#201512", "#58331f"] };
-  const [start, end] = backgrounds[template];
-  const gradient = context.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, start);
-  gradient.addColorStop(1, end);
-  context.fillStyle = gradient;
+  context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
 
   context.save();
-  context.globalAlpha = .12;
-  context.strokeStyle = "#9fc4d5";
+  context.globalAlpha = .8;
+  context.strokeStyle = "#edf0f6";
   context.lineWidth = 1;
-  for (let x = 0; x < width; x += 90) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke(); }
-  for (let y = 0; y < height; y += 90) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); }
-  context.globalAlpha = .36;
-  context.strokeStyle = accent;
-  context.lineWidth = 4;
-  context.beginPath();
-  context.moveTo(width * .58, height * .82);
-  context.bezierCurveTo(width * .72, height * .68, width * .74, height * .9, width * .88, height * .61);
-  context.bezierCurveTo(width * .94, height * .5, width * .94, height * .63, width * 1.04, height * .4);
-  context.stroke();
+  for (let x = 0; x < width; x += 72) { context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke(); }
+  for (let y = 0; y < height; y += 72) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); }
+  context.globalAlpha = .08;
+  context.fillStyle = accent;
+  context.beginPath(); context.arc(width - 40, 60, 260, 0, Math.PI * 2); context.fill();
+  context.beginPath(); context.arc(30, height - 50, 180, 0, Math.PI * 2); context.fill();
   context.restore();
 
   const margin = 76;
@@ -1514,19 +1438,16 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
     context.drawImage(logo, margin + (88 - logo.width * scale) / 2, 62 + (88 - logo.height * scale) / 2, logo.width * scale, logo.height * scale);
     context.restore();
   } else {
-    context.strokeStyle = accent;
-    context.lineWidth = 3;
-    context.beginPath();
-    context.arc(margin + 44, 106, 43, 0, Math.PI * 2);
-    context.stroke();
     context.fillStyle = accent;
-    context.font = "600 32px Georgia, serif";
+    context.beginPath(); context.roundRect(margin, 62, 88, 88, 22); context.fill();
+    context.fillStyle = "#ffffff";
+    context.font = "700 30px Arial, sans-serif";
     context.textAlign = "center";
     context.fillText("IF", margin + 44, 117);
     context.textAlign = "left";
   }
-  context.fillStyle = "#f1f5f6";
-  context.font = "600 32px Georgia, serif";
+  context.fillStyle = "#141722";
+  context.font = "700 32px Arial, sans-serif";
   context.fillText(profile.name || "IntelFlow Pro", margin + 112, 99);
   context.fillStyle = accent;
   context.font = "700 15px Arial, sans-serif";
@@ -1536,17 +1457,17 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   context.fillStyle = accent;
   context.font = "700 18px Arial, sans-serif";
   context.fillText(template === "festival" ? category : `${category}  ·  ${story.tags.slice(0, 2).join(" + ").toUpperCase()}`, margin, 235);
-  context.fillStyle = "#f5f6f3";
-  context.font = `600 ${format === "portrait" ? 72 : 68}px Georgia, serif`;
+  context.fillStyle = "#111521";
+  context.font = `700 ${format === "portrait" ? 70 : 64}px Arial, sans-serif`;
   const headlineLines = impact ? (format === "portrait" ? 4 : 3) : (format === "portrait" ? 5 : 4);
   let cursor = wrapCanvasText(context, headline, margin, 320, width - margin * 2, format === "portrait" ? 82 : 78, headlineLines);
   cursor += 28;
-  context.fillStyle = "#aebbc1";
-  context.font = "400 29px Arial, sans-serif";
+  context.fillStyle = "#5f6675";
+  context.font = "400 28px Arial, sans-serif";
   wrapCanvasText(context, summary, margin, cursor, width - margin * 2, 42, impact ? 1 : format === "portrait" ? 4 : 2);
 
   const sourceY = height - 390;
-  context.fillStyle = "rgba(7,15,20,.72)";
+  context.fillStyle = "#f6f7fb";
   context.roundRect(margin, sourceY, width - margin * 2, 265, 18);
   context.fill();
   let panelY = sourceY + 34;
@@ -1554,10 +1475,10 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
     context.fillStyle = accent;
     context.font = "700 16px Arial, sans-serif";
     context.fillText("COMPANY IMPACT · RESEARCH CONTEXT", margin + 24, panelY);
-    context.fillStyle = "#f2f4f4";
+    context.fillStyle = "#151925";
     context.font = "700 18px Arial, sans-serif";
     context.fillText(`${impact.ticker} · ${impact.direction.toUpperCase()} · ${impact.posture.toUpperCase()}`, margin + 24, panelY + 32);
-    context.fillStyle = "#aab6bb";
+    context.fillStyle = "#687080";
     context.font = "400 15px Arial, sans-serif";
     wrapCanvasText(context, impact.mechanism, margin + 24, panelY + 57, width - margin * 2 - 48, 19, 2);
     panelY += 92;
@@ -1566,31 +1487,31 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   context.font = "700 16px Arial, sans-serif";
   if (template === "festival") {
     context.fillText("A NOTE FOR OUR COMMUNITY", margin + 24, panelY);
-    context.fillStyle = "#eef2f3";
+    context.fillStyle = "#202430";
     context.font = "400 21px Georgia, serif";
     wrapCanvasText(context, "Relationships grow through useful updates, steady guidance and thoughtful conversations.", margin + 24, panelY + 42, width - margin * 2 - 48, 28, 3);
-    context.fillStyle = "#9ba8ae";
+    context.fillStyle = "#737b89";
     context.font = "600 14px Arial, sans-serif";
     context.fillText("Created locally with IntelFlow Community Pack", margin + 24, sourceY + 221);
   } else {
     context.fillText("CLIENT ACTION PLAN", margin + 24, panelY);
     context.font = "700 15px Arial, sans-serif";
     context.fillText("DO", margin + 24, panelY + 34);
-    context.fillStyle = "#eef2f3";
+    context.fillStyle = "#202430";
     context.font = "400 16px Arial, sans-serif";
     wrapCanvasText(context, guidance.do, margin + 70, panelY + 34, width - margin * 2 - 100, 20, 1);
-    context.fillStyle = "#d8a879";
+    context.fillStyle = "#ee725c";
     context.font = "700 15px Arial, sans-serif";
     context.fillText("AVOID", margin + 24, panelY + 67);
-    context.fillStyle = "#eef2f3";
+    context.fillStyle = "#202430";
     context.font = "400 16px Arial, sans-serif";
     wrapCanvasText(context, guidance.dont, margin + 90, panelY + 67, width - margin * 2 - 120, 20, 1);
-    context.fillStyle = "#9ba8ae";
+    context.fillStyle = "#737b89";
     context.font = "600 14px Arial, sans-serif";
     context.fillText(`Source: ${story.source.slice(0, 62)}`, margin + 24, sourceY + 221);
   }
   const disclaimer = profile.disclaimer.length > 112 ? `${profile.disclaimer.slice(0, 109).trimEnd()}…` : profile.disclaimer;
-  context.fillStyle = "#788990";
+  context.fillStyle = "#8a91a0";
   context.font = "400 13px Arial, sans-serif";
   context.fillText(disclaimer, margin + 24, sourceY + 247);
 
@@ -1599,11 +1520,11 @@ async function renderSocialCard(canvas: HTMLCanvasElement, options: { story: Sto
   context.beginPath(); context.moveTo(margin, height - 92); context.lineTo(width - margin, height - 92); context.stroke();
   context.globalAlpha = 1;
   const identity = [profile.arn, profile.euin].filter(Boolean).join("  ·  ");
-  context.fillStyle = "#f1f4f5";
+  context.fillStyle = "#1c202b";
   context.font = "600 17px Arial, sans-serif";
   context.fillText(identity || "IntelFlow · Distributor Pro", margin, height - 55);
   context.textAlign = "right";
-  context.fillStyle = "#91a0a8";
+  context.fillStyle = "#7d8593";
   context.font = "400 14px Arial, sans-serif";
   context.fillText(template === "festival" ? "Created for community sharing" : "For information only · Verify the original source", width - margin, height - 55);
   context.textAlign = "left";
