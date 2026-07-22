@@ -388,7 +388,7 @@ export default function Home() {
   const [selected, setSelected] = useState<string[]>(["AI", "India", "Technology", "Markets"]);
   const [activeTag, setActiveTag] = useState("For you");
   const [bookmarks, setBookmarks] = useState<number[]>([]);
-  const [page, setPage] = useState<AppPage>("feed");
+  const [page, setPage] = useState<AppPage>("pro");
   const [proTab, setProTab] = useState<ProTab>("desk");
   const [studioTool, setStudioTool] = useState<StudioTool>("note");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -422,7 +422,7 @@ export default function Home() {
       const parameters = new URLSearchParams(window.location.search);
       const requestedPage = parameters.get("view") as AppPage | null;
       const requestedTab = parameters.get("tab");
-      const nextPage = requestedPage && appPages.includes(requestedPage) ? requestedPage : "feed";
+      const nextPage = requestedPage && appPages.includes(requestedPage) ? requestedPage : "pro";
       const legacyStudioTab = requestedTab === "social" || requestedTab === "notes";
       const nextTab = legacyStudioTab ? "studio" : requestedTab && proTabs.includes(requestedTab as ProTab) ? requestedTab as ProTab : "desk";
       const requestedTool = parameters.get("tool");
@@ -491,7 +491,7 @@ export default function Home() {
     storage.set("intelflow:interests", selected);
     trackEvent("onboarding_completed", { interest_count: selected.length });
     setOnboarded(true);
-    writeAppUrl("feed");
+    navigatePro("desk");
   }
 
   function toggleBookmark(id: number) {
@@ -650,17 +650,21 @@ export default function Home() {
       </header>
 
       <nav className="primary-nav" aria-label="Primary navigation">
-        <button className={page === "feed" ? "active" : ""} onClick={() => navigate("feed")}><span>⌂</span>Briefing</button>
-        <button className={page === "saved" ? "active" : ""} onClick={() => navigate("saved")}><span>☆</span>Saved</button>
-        <button className={page === "pro" ? "active" : ""} onClick={() => navigate("pro")}><span>◆</span>Distributor Pro</button>
+        <button className={page === "pro" && proTab === "desk" ? "active" : ""} onClick={() => navigatePro("desk")}><span>⌂</span><b>Dashboard</b></button>
+        <button className={page === "feed" ? "active" : ""} onClick={() => navigate("feed")}><span>▤</span><b>News</b></button>
+        <button className={page === "pro" && proTab === "regulators" ? "active" : ""} onClick={() => navigatePro("regulators")}><span>✓</span><b>Compliance</b></button>
+        <button className={page === "pro" && proTab === "studio" ? "active" : ""} onClick={() => navigatePro("studio", explainStory, studioTool)}><span>＋</span><b>Create</b></button>
+        <button className={page === "saved" ? "active" : ""} onClick={() => navigate("saved")}><span>☆</span><b>Library</b></button>
       </nav>
+
+      <div className="app-main">
 
       {page === "feed" && (
         <>
           <section className="welcome-row">
             <div>
               <span className="date-label">LIVE · INDIA + UNITED STATES</span>
-              <h1>Your daily desk.</h1>
+              <h1>News intelligence.</h1>
               <p>{visibleStories.length} signals selected for your interests{lastUpdated ? ` · Updated ${lastUpdated}` : ""}{sourceCount ? ` · ${activeSources}/${sourceCount} sources live` : ""}.</p>
             </div>
             <button className={`refresh-feed ${refreshing ? "refreshing" : ""}`} onClick={() => loadFeed(true)} disabled={refreshing}><span>↻</span>{refreshing ? "Updating" : "Refresh"}</button>
@@ -699,7 +703,7 @@ export default function Home() {
 
       {(page === "feed" || page === "saved") && (
         <section className="story-stage">
-          {page === "saved" && <div className="section-heading"><span>SAVED BRIEFING</span><h1>Your reading list</h1></div>}
+          {page === "saved" && <div className="section-heading"><span>YOUR LIBRARY</span><h1>Saved intelligence</h1></div>}
           {!visibleStories.length ? (
             <div className="empty-state">
               <span>☆</span><h2>Nothing saved yet</h2><p>Tap the bookmark on any briefing to keep it here.</p>
@@ -748,6 +752,7 @@ export default function Home() {
         </section>
       )}
 
+      </div>
     </main>
   );
 }
@@ -764,19 +769,9 @@ function StoryCompanyImpact({ story, manualTickers, watchedTickers }: { story: S
   const impacts = getCompanyImpacts(story, manualTickers);
   const financeRelevant = story.tags.some((tag) => ["Markets", "Business", "India", "Regulation", "Personal Finance", "Economy", "Energy", "US"].includes(tag));
   if (!impacts.length && !financeRelevant) return null;
-  if (!impacts.length) return <aside className="story-impact-card empty-impact" aria-label={`Company impact for ${story.title}`}>
-    <div className="story-impact-head"><span>◆ COMPANY IMPACT</span><small>Connection check complete</small></div>
-    <strong>No reliable listed-company match yet</strong>
-    <p>IntelFlow will not force a weak connection. Attach a company only if you can explain the transmission channel and verify it from a primary source.</p>
-    <div><span>NO AUTOMATIC TRADE VIEW</span><a href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`}>Attach company in Pro →</a></div>
-  </aside>;
+  if (!impacts.length) return <details className="story-impact-card empty-impact" aria-label={`Company impact for ${story.title}`}><summary><span>◆ COMPANY IMPACT</span><strong>No reliable listed-company match</strong><i>Details ＋</i></summary><div className="story-impact-detail"><p>IntelFlow will not force a weak connection. Attach a company only if you can explain the transmission channel and verify it from a primary source.</p><a href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`}>Attach a company in Research tools →</a></div></details>;
   const watched = impacts.filter((impact) => watchedTickers.includes(impact.ticker)).length;
-  return <aside className="story-impact-card" aria-label={`Company impact for ${story.title}`}>
-    <div className="story-impact-head"><span>◆ COMPANY IMPACT</span><small>{impacts[0].confidence} confidence · {impacts[0].directness}</small></div>
-    <strong>{impacts[0].ticker} · {impacts[0].direction}</strong>
-    <p>{impacts[0].mechanism}</p>
-    <div><span>{impacts.map((impact) => `${watchedTickers.includes(impact.ticker) ? "★ " : ""}${impact.ticker}`).join(" · ")}</span><a href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`}>{watched ? `${watched} watched · ` : ""}See full read-through →</a></div>
-  </aside>;
+  return <details className="story-impact-card" aria-label={`Company impact for ${story.title}`}><summary><span>◆ COMPANY IMPACT</span><strong>{impacts[0].ticker} · {impacts[0].direction}</strong><i>Details ＋</i></summary><div className="story-impact-detail"><small>{impacts[0].confidence} confidence · {impacts[0].directness}</small><p>{impacts[0].mechanism}</p><div><span>{impacts.map((impact) => `${watchedTickers.includes(impact.ticker) ? "★ " : ""}${impact.ticker}`).join(" · ")}</span><a href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`}>{watched ? `${watched} watched · ` : ""}Open research tools →</a></div></div></details>;
 }
 
 function selectMorningFive(stories: Story[]) {
@@ -827,6 +822,9 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
   const [regulatorUpdates, setRegulatorUpdates] = useState<RegulatorUpdate[]>([]);
   const [regulatorHealth, setRegulatorHealth] = useState<RegulatorHealth[]>([]);
   const [regulatorLoading, setRegulatorLoading] = useState(true);
+  const [quickDrawer, setQuickDrawer] = useState<{ story: Story; tool: StudioTool } | null>(null);
+  const [quickDraft, setQuickDraft] = useState("");
+  const [quickStatus, setQuickStatus] = useState("");
   const [attachStoryId, setAttachStoryId] = useState(String(stories[0]?.id || ""));
   const [attachTicker, setAttachTicker] = useState(companyUniverse[0].ticker);
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -858,10 +856,28 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
       return Number(b.impacts[0].confidence === "High") - Number(a.impacts[0].confidence === "High");
     })
     .slice(0, 6);
+  const dashboardPriorities = (() => {
+    const priorities: Array<{ story: Story; label: string; reason: string }> = [];
+    const add = (story: Story | undefined, label: string, reason: string) => {
+      if (story && !priorities.some((item) => item.story.id === story.id)) priorities.push({ story, label, reason });
+    };
+    if (regulatorUpdates[0]) add(regulatorStory(regulatorUpdates[0]), "OFFICIAL UPDATE", `${regulatorUpdates[0].authority} · ${regulatorUpdates[0].category}`);
+    add(impactQueue[0]?.story, "COMPANY IMPACT", impactQueue[0]?.impacts[0] ? `${impactQueue[0].impacts[0].ticker} · ${impactQueue[0].impacts[0].direction}` : "Research connection");
+    add(morningFive[0], "MORNING SIGNAL", morningFive[0]?.tags.slice(0, 2).join(" · ") || "Today");
+    morningFive.forEach((story) => add(story, "MORNING SIGNAL", story.tags.slice(0, 2).join(" · ")));
+    return priorities.slice(0, 3);
+  })();
   const trialProgress = trialStatus.locked ? "Trial complete" : [trialStatus.daysRemaining ? `${trialStatus.daysRemaining} day${trialStatus.daysRemaining === 1 ? "" : "s"} left` : "Time requirement complete", trialStatus.actionsRemaining ? `${trialStatus.actionsRemaining} output${trialStatus.actionsRemaining === 1 ? "" : "s"} left` : "Output allowance used"].join(" · ");
   useEffect(() => {
     if (initialStory) setStudioStory(initialStory);
   }, [initialStory]);
+
+  useEffect(() => {
+    if (!quickDrawer) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setQuickDrawer(null); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [quickDrawer]);
 
   function loadRegulators(force = false) {
     setRegulatorLoading(true);
@@ -924,9 +940,9 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 
   function recordTrialAction(action: string) {
     setTrial((current) => {
-      if (!current) return current;
-      const next = { ...current, actions: current.actions + 1 };
+      const next = current ? { ...current, actions: current.actions + 1 } : { startedAt: Date.now(), actions: 1 };
       storage.set(trialStorageKey, next);
+      storage.set("intelflow:pro-demo", true);
       return next;
     });
     trackEvent("pro_trial_action", { action, action_number: (trial?.actions || 0) + 1 });
@@ -995,6 +1011,43 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
     navigateTab("studio", story, "image");
   }
 
+  function openQuickDrawer(story: Story, nextTool: StudioTool) {
+    setStudioStory(story);
+    setQuickDrawer({ story, tool: nextTool });
+    setQuickDraft(buildClientNote(story, profile, shortStoryContext(story), getCompanyImpacts(story, manualCompanyLinks[String(story.id)])[0] || null));
+    setQuickStatus("");
+    trackEvent("dashboard_quick_action_opened", { item_id: String(story.id), tool: nextTool });
+  }
+
+  async function copyQuickNote() {
+    if (!quickDrawer || !allowOutput()) return;
+    await navigator.clipboard?.writeText(quickDraft);
+    recordTrialAction("dashboard_quick_note");
+    setQuickStatus("Client note copied.");
+  }
+
+  async function shareQuickImage() {
+    if (!quickDrawer || !allowOutput()) return;
+    setQuickStatus("Preparing image…");
+    try {
+      const canvas = document.createElement("canvas");
+      const story = quickDrawer.story;
+      const template: SocialTemplate = story.tags.includes("Regulation") ? "regulatory" : story.tags.includes("Markets") ? "market" : "signal";
+      await renderSocialCard(canvas, { story, headline: story.title, context: shortStoryContext(story), profile, format: "square", template, impact: getCompanyImpacts(story, manualCompanyLinks[String(story.id)])[0] || null });
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) { setQuickStatus("Image could not be prepared."); return; }
+      const file = new File([blob], `intelflow-${story.id}.png`, { type: "image/png" });
+      const canNativeShare = Boolean(navigator.share && navigator.canShare?.({ files: [file] }));
+      if (canNativeShare) await navigator.share({ files: [file], title: story.title });
+      else downloadSocialCard(blob, file.name);
+      recordTrialAction("dashboard_quick_image");
+      setQuickStatus(canNativeShare ? "Share sheet opened." : "Image downloaded.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") setQuickStatus("");
+      else setQuickStatus("Could not prepare the share image. Please use the full studio.");
+    }
+  }
+
   function toggleDeskAction(actionId: string) {
     setCompletedDeskActions((current) => {
       const next = current.includes(actionId) ? current.filter((item) => item !== actionId) : [...current, actionId];
@@ -1004,93 +1057,63 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
     });
   }
 
-  if (!trial && tab !== "regulators") {
-    return (
-      <section className="pro-landing">
-        <div className="pro-hero">
-          <span className="pro-kicker">INTELFLOW DISTRIBUTOR PRO</span>
-          <h1>Your morning intelligence desk.</h1>
-          <p>Save time every working day with a focused briefing, official-source watch, practical conversation cues and ready-to-edit client content.</p>
-          <div className="pro-price"><strong>₹399</strong><span>/ month<br />or ₹3,999 yearly</span></div>
-          <button onClick={startTrial}>Start free local trial <span>→</span></button>
-          <a className="trial-regulator-link" href="/?view=pro&tab=regulators">Browse free Regulator Watch ↗</a>
-          <small>7 days and 10 client-content actions, whichever gives you longer. Trial controls stay on this device; branded links are hosted only when you choose to publish one. No payment or subscription.</small>
-        </div>
-        <div className="pro-feature-grid">
-          <article><span>01</span><strong>Morning 5</strong><p>The five market, business and regulatory signals most useful for today.</p></article>
-          <article className="impact-feature"><span>02 · NEW</span><strong>Company Impact</strong><p>Connect a headline to listed companies, see the transmission channel and build a disciplined research queue.</p></article>
-          <article><span>03</span><strong>Client content studio</strong><p>Turn one headline into a concise note or an attention-grabbing branded image.</p></article>
-          <article><span>04</span><strong>Source + compliance kit</strong><p>Neutral starters, regulator links, attribution and review reminders in one workflow.</p></article>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <section className="pro-workspace">
       <header className="pro-workspace-head">
-        <div><span className="pro-kicker">DISTRIBUTOR PLATFORM · {trial ? "LOCAL TRIAL" : "FREE ACCESS"}</span><h1>Good morning{profile.name ? `, ${profile.name.split(" ")[0]}` : ""}.</h1><p>Your market, business and regulatory desk in one calm view.</p></div>
-        <span className={`pro-status ${trialStatus.locked ? "locked" : ""}`}>{!trial ? "FREE ACCESS" : trialStatus.locked ? "TRIAL COMPLETE" : `TRIAL DAY ${trialStatus.day}`}</span>
+        <div><span className="pro-kicker">INTELFLOW DASHBOARD · {new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }).toUpperCase()}</span><h1>{tab === "desk" ? `Good morning${profile.name ? `, ${profile.name.split(" ")[0]}` : ""}.` : tab === "studio" ? "Create client-ready content." : tab === "regulators" ? "Compliance intelligence." : "Distributor settings."}</h1><p>{tab === "desk" ? "Three priorities, five essential stories and your next client action." : tab === "studio" ? "One source-backed workspace for notes, images and share links." : tab === "regulators" ? "Official updates, document briefs and verified reminders." : "Identity and disclaimers stored only on this device."}</p></div>
+        <div className="workspace-head-actions">{!trial && <button type="button" onClick={startTrial}>Activate 7-day trial</button>}<span className={`pro-status ${trialStatus.locked ? "locked" : ""}`}>{!trial ? "TRIAL READY" : trialStatus.locked ? "TRIAL COMPLETE" : `TRIAL DAY ${trialStatus.day}`}</span></div>
       </header>
       {trial && <div className={`trial-meter ${trialStatus.locked ? "locked" : ""}`}><div><span>LOCAL TRIAL</span><strong>{trialProgress}</strong></div><p>Usage is stored only on this browser. News and official regulator access remain free.</p></div>}
       {trialStatus.locked && <section className="trial-upgrade-banner"><div><span>CONTINUE WITH INTELFLOW PRO</span><h2>Your trial is complete.</h2><p>Client-content copying, image generation and exports are paused. The briefing and regulator sources remain available.</p></div><div><strong>₹399<small>/month</small></strong><a href="mailto:hello@swarnimcapital.com?subject=IntelFlow%20Pro%20early%20access" onClick={() => trackEvent("pro_upgrade_clicked", { placement: "trial_gate" })}>Request Pro access →</a><small>Early-access request only. No payment is collected here.</small></div></section>}
-      <nav className="pro-tabs" aria-label="Distributor Pro sections">
-        <button className={tab === "desk" ? "active" : ""} onClick={() => navigateTab("desk")}>Today</button>
-        <button className={tab === "studio" ? "active" : ""} onClick={() => navigateTab("studio", activeStudioStory, tool)}>Client Studio</button>
-        <button className={tab === "regulators" ? "active" : ""} onClick={() => navigateTab("regulators")}>Regulators</button>
-        <button className={tab === "profile" ? "active" : ""} onClick={() => navigateTab("profile")}>Profile</button>
-      </nav>
+      {tab === "desk" && <div className="unified-desk dashboard-home">
+        <section className="dashboard-kpis" aria-label="Today's workspace summary">
+          <article><span>LIVE INTELLIGENCE</span><strong>{stories.length}</strong><small>fresh signals</small></article>
+          <article><span>OFFICIAL INBOX</span><strong>{regulatorUpdates.length}</strong><small>{regulatorHealth.filter((source) => source.status === "live").length}/5 sources live</small></article>
+          <article><span>ACTION BOARD</span><strong>{dailyDeskActions.length - completedDeskActions.filter((id) => dailyDeskActions.some((action) => action.id === id)).length}</strong><small>items remaining</small></article>
+          <button type="button" onClick={() => openQuickDrawer(morningFive[0] || stories[0] || demoStories[0], "note")}><span>＋</span><strong>Quick create</strong><small>Note or social image</small></button>
+        </section>
 
-      {tab === "desk" && <div className="unified-desk">
-        <section className="news-action-checklist">
-          <header><div><span className="pro-kicker">TODAY’S DISTRIBUTOR ACTIONS</span><h2>Action checklist</h2><p>Four core actions plus checks triggered by today’s live news. Completion stays only on this browser.</p></div><div><strong>{completedDeskActions.filter((id) => dailyDeskActions.some((action) => action.id === id)).length}/{dailyDeskActions.length}</strong><span>{dailyDeskActions.filter((action) => action.newsTriggered).length} news-triggered</span></div></header>
-          <div>{dailyDeskActions.map((action) => <button type="button" key={action.id} className={`${completedDeskActions.includes(action.id) ? "done" : ""} ${action.newsTriggered ? "news-triggered" : ""}`} onClick={() => toggleDeskAction(action.id)}><i>{completedDeskActions.includes(action.id) ? "✓" : ""}</i><span><strong>{action.title}</strong><small>{action.reason}</small></span>{action.newsTriggered && <b>FROM TODAY’S NEWS</b>}</button>)}</div>
-        </section>
-        <DailyClientDigest stories={morningFive.length ? morningFive : stories.slice(0, 5)} updates={regulatorUpdates} profile={profile} locked={trialStatus.locked} onOutput={recordTrialAction} />
-        <section className="company-impact-hub" id="company-impact">
-          <header className="impact-hub-hero"><div><span className="pro-kicker">NEW · NEWS-TO-COMPANY RESEARCH</span><h2>Company Impact</h2><p>Understand why a headline may matter, what financial variable to inspect and what still needs proof. These are research prompts—not buy, sell or hold recommendations.</p></div><div><strong>{impactQueue.length}</strong><span>live connections</span><small>{companyWatchlist.length} companies watched locally</small></div></header>
-          <div className="impact-attach-bar">
-            <div><strong>Attach an article manually</strong><span>Add a company when you see a connection IntelFlow has not inferred.</span></div>
-            <select aria-label="Article to attach" value={attachStoryId} onChange={(event) => setAttachStoryId(event.target.value)}>{stories.slice(0, 40).map((story) => <option key={story.id} value={story.id}>{story.title}</option>)}</select>
-            <select aria-label="Company to attach" value={attachTicker} onChange={(event) => setAttachTicker(event.target.value)}>{companyUniverse.map((company) => <option key={company.ticker} value={company.ticker}>{company.ticker} · {company.name}</option>)}</select>
-            <button type="button" onClick={() => attachCompanyToStory(Number(attachStoryId), attachTicker)}>Attach</button>
+        <div className="dashboard-core">
+          <div className="dashboard-main-column">
+            <section className="dashboard-priorities">
+              <header><div><span className="pro-kicker">DO THESE FIRST</span><h2>Today’s priorities</h2></div><small>Updated from live news and official sources</small></header>
+              <div>{dashboardPriorities.map((item, index) => <article key={item.story.id}>
+                <span>{String(index + 1).padStart(2, "0")}</span><div><small>{item.label} · {item.reason}</small><h3>{item.story.title}</h3><p>{shortStoryContext(item.story)}</p></div>
+                <div><button type="button" onClick={() => openQuickDrawer(item.story, "note")}>Explain</button><button type="button" onClick={() => openQuickDrawer(item.story, "image")}>Share</button><a href={item.story.sourceUrl} target="_blank" rel="noreferrer">Source ↗</a></div>
+              </article>)}</div>
+            </section>
+
+            <section className="morning-five dashboard-morning">
+              <div className="pro-section-title"><div><span>FIVE ESSENTIAL SIGNALS</span><h2>Morning 5</h2></div><a href="/?view=feed">Open all news →</a></div>
+              {(morningFive.length ? morningFive : stories.slice(0, 5)).map((story, index) => <article key={story.id}>
+                <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p></div><div className="morning-actions"><button onClick={() => openQuickDrawer(story, "note")}>Explain</button><button onClick={() => openQuickDrawer(story, "image")}>Share</button></div>
+              </article>)}
+            </section>
           </div>
-          <div className="impact-queue">
-            <div className="impact-queue-label"><span>TODAY’S RESEARCH QUEUE</span><small>Prioritised by direct mention, watchlist relevance and confidence</small></div>
-            {impactQueue.length ? impactQueue.map(({ story, impacts }) => <article key={story.id} className={story.id === requestedImpactId ? "requested" : ""}>
-              <div className="impact-story-line"><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><a href={story.sourceUrl} target="_blank" rel="noreferrer">Verify source ↗</a></div>
-              <div className="impact-company-grid">{impacts.map((impact) => <div className="impact-company" key={impact.ticker}>
-                <div className="impact-company-title"><span>{impact.ticker}</span><i className={impact.direction.includes("positive") ? "positive" : impact.direction.includes("negative") ? "negative" : "mixed"}>{impact.direction}</i><button type="button" className={companyWatchlist.includes(impact.ticker) ? "watched" : ""} onClick={() => toggleCompanyWatch(impact.ticker)}>{companyWatchlist.includes(impact.ticker) ? "★ Watching" : "☆ Watch"}</button></div>
-                <strong>{impact.name}</strong><p>{impact.mechanism}</p>
-                <dl><div><dt>Connection</dt><dd>{impact.directness} · {impact.confidence}</dd></div><div><dt>What to verify</dt><dd>{impact.verify}</dd></div><div><dt>Posture</dt><dd>{impact.posture}</dd></div></dl>
-                <button type="button" className="impact-studio-link" onClick={() => { setStudioStory(story); setIncludeCompanyImpact(true); navigateTab("studio", story, "note"); }}>Add to client content →</button>
-              </div>)}</div>
-            </article>) : <p className="impact-empty">No high- or medium-confidence company connections are available yet. Attach a current article above to begin a research note.</p>}
-          </div>
-          <footer><strong>Today’s research discipline</strong><span>Verify the original source → identify the affected financial line → check what the market may already reflect → wait for proof before action.</span></footer>
-        </section>
-        <div className="pro-desk-grid focused-desk">
-          <section className="morning-five">
-            <div className="pro-section-title"><div><span>6-MINUTE READ</span><h2>Morning 5</h2></div><i>{morningFive.length || 5}</i></div>
-            {(morningFive.length ? morningFive : stories.slice(0, 5)).map((story, index) => <article key={story.id}>
-              <span>{String(index + 1).padStart(2, "0")}</span><div><small>{story.tags.slice(0, 2).join(" · ")}</small><h3>{story.title}</h3><p>{story.summary}</p><div className="morning-actions"><button onClick={() => openClientNote(story, "morning_five")}>Write note →</button><button onClick={() => openSocialCard(story, "morning_five")}>Create image →</button></div></div>
-            </article>)}
-          </section>
-        </div>
-        <div className="pro-tools-grid">
-          <section className="practice-feed">
-            <div className="pro-section-title"><div><span>LIVE RSS · PRACTICE EDGE</span><h2>Conversation cues</h2></div><i className="live-dot">LIVE</i></div>
-            {(practiceStories.length ? practiceStories : stories.slice(0, 6)).map((story) => <article key={story.id}><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><p><strong>Try this:</strong> {conversationCue(story)}</p><div><a href={story.sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackEvent("source_opened", { item_id: String(story.id), source: story.source, entry_point: "practice_feed" })}>Open source ↗</a><button onClick={() => openClientNote(story, "practice_feed")}>Make note →</button></div></article>)}
-          </section>
-          <aside className="x-source-watch">
-            <span className="pro-kicker">OFFICIAL X WATCH</span><h2>Useful source channels.</h2><p>Fast awareness only. Verify regulatory information on the authority’s official website before using it.</p>
-            <a href="https://x.com/SEBI_updates" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "SEBI_updates" })}><strong>@SEBI_updates</strong><span>Regulations and circulars ↗</span></a>
-            <a href="https://x.com/sebi_india" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "sebi_india" })}><strong>@sebi_india</strong><span>Investor education ↗</span></a>
-            <a href="https://x.com/RBI" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "RBI" })}><strong>@RBI</strong><span>Reserve Bank updates ↗</span></a>
-            <a href="https://x.com/RBIsays" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "RBIsays" })}><strong>@RBIsays</strong><span>Public awareness ↗</span></a>
-            <a href="https://x.com/MFSahiHai" target="_blank" rel="noreferrer" onClick={() => trackEvent("official_social_opened", { channel: "MFSahiHai" })}><strong>@MFSahiHai</strong><span>Mutual fund education ↗</span></a>
+
+          <aside className="dashboard-side-column">
+            <section className="dashboard-quick-create"><span className="pro-kicker">QUICK CREATE</span><h2>One source. Any output.</h2><p>Use the leading story or continue in the complete studio.</p><div><button type="button" onClick={() => openQuickDrawer(morningFive[0] || stories[0] || demoStories[0], "note")}><span>✎</span><strong>Client note</strong><small>Copy in seconds</small></button><button type="button" onClick={() => openQuickDrawer(morningFive[0] || stories[0] || demoStories[0], "image")}><span>▣</span><strong>Social image</strong><small>Share locally</small></button></div><button type="button" className="open-studio" onClick={() => navigateTab("studio", activeStudioStory, "note")}>Open complete Create studio →</button></section>
+
+            <details className="dashboard-checklist"><summary><div><span className="pro-kicker">ACTION BOARD</span><strong>{completedDeskActions.filter((id) => dailyDeskActions.some((action) => action.id === id)).length}/{dailyDeskActions.length} complete</strong></div><i>Open checklist ＋</i></summary><div>{dailyDeskActions.map((action) => <button type="button" key={action.id} className={`${completedDeskActions.includes(action.id) ? "done" : ""} ${action.newsTriggered ? "news-triggered" : ""}`} onClick={() => toggleDeskAction(action.id)}><i>{completedDeskActions.includes(action.id) ? "✓" : ""}</i><span><strong>{action.title}</strong><small>{action.reason}</small></span></button>)}</div></details>
+
+            <DailyClientDigest stories={morningFive.length ? morningFive : stories.slice(0, 5)} updates={regulatorUpdates} profile={profile} locked={trialStatus.locked} onOutput={recordTrialAction} />
+
+            <section className="impact-spotlight"><header><span className="pro-kicker">COMPANY IMPACT</span><strong>{impactQueue.length} live connections</strong></header>{impactQueue[0] ? <><small>{impactQueue[0].impacts[0].ticker} · {impactQueue[0].impacts[0].direction}</small><h3>{impactQueue[0].story.title}</h3><p>{impactQueue[0].impacts[0].mechanism}</p><a href={`/?view=pro&tab=desk&impact=${impactQueue[0].story.id}#company-impact`}>Open research tools →</a></> : <p>No reliable company connection is available yet.</p>}</section>
           </aside>
         </div>
+
+        <details className="dashboard-deep-dive" id="company-impact" defaultOpen={Boolean(requestedImpactId)}>
+          <summary><div><span className="pro-kicker">RESEARCH WORKSPACE</span><strong>Company Impact and manual connections</strong><small>Open only when you need the full transmission analysis.</small></div><i>Open research tools ＋</i></summary>
+          <section className="company-impact-hub">
+            <header className="impact-hub-hero"><div><span className="pro-kicker">NEWS-TO-COMPANY RESEARCH</span><h2>Company Impact</h2><p>Understand why a headline may matter, what financial variable to inspect and what still needs proof. These are research prompts—not recommendations.</p></div><div><strong>{impactQueue.length}</strong><span>live connections</span><small>{companyWatchlist.length} watched locally</small></div></header>
+            <div className="impact-attach-bar"><div><strong>Attach an article manually</strong><span>Add a company only when you can explain the connection.</span></div><select aria-label="Article to attach" value={attachStoryId} onChange={(event) => setAttachStoryId(event.target.value)}>{stories.slice(0, 40).map((story) => <option key={story.id} value={story.id}>{story.title}</option>)}</select><select aria-label="Company to attach" value={attachTicker} onChange={(event) => setAttachTicker(event.target.value)}>{companyUniverse.map((company) => <option key={company.ticker} value={company.ticker}>{company.ticker} · {company.name}</option>)}</select><button type="button" onClick={() => attachCompanyToStory(Number(attachStoryId), attachTicker)}>Attach</button></div>
+            <div className="impact-queue"><div className="impact-queue-label"><span>TODAY’S RESEARCH QUEUE</span><small>Direct mention, watchlist relevance and confidence</small></div>{impactQueue.length ? impactQueue.map(({ story, impacts }) => <article key={story.id} className={story.id === requestedImpactId ? "requested" : ""}><div className="impact-story-line"><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><a href={story.sourceUrl} target="_blank" rel="noreferrer">Verify source ↗</a></div><div className="impact-company-grid">{impacts.map((impact) => <div className="impact-company" key={impact.ticker}><div className="impact-company-title"><span>{impact.ticker}</span><i className={impact.direction.includes("positive") ? "positive" : impact.direction.includes("negative") ? "negative" : "mixed"}>{impact.direction}</i><button type="button" className={companyWatchlist.includes(impact.ticker) ? "watched" : ""} onClick={() => toggleCompanyWatch(impact.ticker)}>{companyWatchlist.includes(impact.ticker) ? "★ Watching" : "☆ Watch"}</button></div><strong>{impact.name}</strong><p>{impact.mechanism}</p><dl><div><dt>Connection</dt><dd>{impact.directness} · {impact.confidence}</dd></div><div><dt>What to verify</dt><dd>{impact.verify}</dd></div><div><dt>Posture</dt><dd>{impact.posture}</dd></div></dl><button type="button" className="impact-studio-link" onClick={() => { setStudioStory(story); setIncludeCompanyImpact(true); openQuickDrawer(story, "note"); }}>Add to client content →</button></div>)}</div></article>) : <p className="impact-empty">No reliable company connections are available yet.</p>}</div>
+          </section>
+        </details>
+
+        <details className="dashboard-secondary-tools"><summary><div><span className="pro-kicker">OPTIONAL SOURCES</span><strong>Conversation cues and official social watch</strong></div><i>Show tools ＋</i></summary><div className="pro-tools-grid"><section className="practice-feed"><div className="pro-section-title"><div><span>LIVE RSS · PRACTICE EDGE</span><h2>Conversation cues</h2></div><i className="live-dot">LIVE</i></div>{(practiceStories.length ? practiceStories : stories.slice(0, 6)).map((story) => <article key={story.id}><div><small>{story.source} · {story.age}</small><h3>{story.title}</h3></div><p><strong>Try this:</strong> {conversationCue(story)}</p><div><a href={story.sourceUrl} target="_blank" rel="noreferrer">Open source ↗</a><button onClick={() => openQuickDrawer(story, "note")}>Make note →</button></div></article>)}</section><aside className="x-source-watch"><span className="pro-kicker">OFFICIAL X WATCH</span><h2>Useful source channels.</h2><p>Fast awareness only. Verify regulatory information on the authority’s website.</p><a href="https://x.com/SEBI_updates" target="_blank" rel="noreferrer"><strong>@SEBI_updates</strong><span>Regulations and circulars ↗</span></a><a href="https://x.com/RBI" target="_blank" rel="noreferrer"><strong>@RBI</strong><span>Reserve Bank updates ↗</span></a><a href="https://x.com/MFSahiHai" target="_blank" rel="noreferrer"><strong>@MFSahiHai</strong><span>Mutual fund education ↗</span></a></aside></div></details>
+
+        {quickDrawer && <div className="quick-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickDrawer(null); }}><aside className="quick-drawer" role="dialog" aria-modal="true" aria-label="Quick create"><header><div><span className="pro-kicker">QUICK CREATE</span><strong>{quickDrawer.story.title}</strong><small>{quickDrawer.story.source} · {quickDrawer.story.age}</small></div><button type="button" onClick={() => setQuickDrawer(null)} aria-label="Close quick create">×</button></header><nav><button type="button" className={quickDrawer.tool === "note" ? "active" : ""} onClick={() => setQuickDrawer({ ...quickDrawer, tool: "note" })}>Written note</button><button type="button" className={quickDrawer.tool === "image" ? "active" : ""} onClick={() => setQuickDrawer({ ...quickDrawer, tool: "image" })}>Social image</button></nav>{quickDrawer.tool === "note" ? <div className="quick-note"><label>Editable client note<textarea value={quickDraft} onChange={(event) => setQuickDraft(event.target.value)} /></label><div><button type="button" className="primary" disabled={trialStatus.locked} onClick={() => void copyQuickNote()}>Copy note</button><button type="button" onClick={() => { setQuickDrawer(null); navigateTab("studio", quickDrawer.story, "note"); }}>Full editor →</button></div></div> : <div className="quick-image"><div><span>{quickDrawer.story.tags.slice(0, 2).join(" · ")}</span><strong>{quickDrawer.story.title}</strong><p>{shortStoryContext(quickDrawer.story)}</p><small>CLIENT ACTION · STAY WITH THE AGREED PLAN</small></div><button type="button" className="primary" disabled={trialStatus.locked} onClick={() => void shareQuickImage()}>Generate and share image</button><button type="button" onClick={() => { setQuickDrawer(null); navigateTab("studio", quickDrawer.story, "image"); }}>Open design studio →</button></div>}{quickStatus && <p className="quick-status" role="status">{quickStatus}</p>}<footer>Source attribution and your local distributor disclaimer remain included. Review before sharing.</footer></aside></div>}
       </div>}
 
       {tab === "studio" && <section className="client-content-studio">
