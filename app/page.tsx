@@ -1055,30 +1055,35 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
       {trial && <div className={`trial-meter ${trialStatus.locked ? "locked" : ""}`}><div><span>LOCAL TRIAL</span><strong>{trialProgress}</strong></div><p>Usage is stored only on this browser. News and official regulator access remain free.</p></div>}
       {trialStatus.locked && <section className="trial-upgrade-banner"><div><span>CONTINUE WITH INTELFLOW PRO</span><h2>Your trial is complete.</h2><p>Client-content copying, image generation and exports are paused. The briefing and regulator sources remain available.</p></div><div><strong>₹399<small>/month</small></strong><a href="mailto:hello@swarnimcapital.com?subject=IntelFlow%20Pro%20early%20access" onClick={() => trackEvent("pro_upgrade_clicked", { placement: "trial_gate" })}>Request Pro access →</a><small>Early-access request only. No payment is collected here.</small></div></section>}
       {tab === "desk" && <div className="unified-desk dashboard-home">
-        <section className="dashboard-pulse" aria-label="Live intelligence pulse">
-          <div className="dashboard-pulse-copy"><span><i /> LIVE DISTRIBUTOR DESK</span><h2>Know what matters.<br />Send one clear update.</h2><p>Your finance, market and regulatory workflow—condensed into a single morning sequence.</p></div>
-          <div className="dashboard-pulse-stats"><article><strong>{stories.length}</strong><span>signals</span></article><article><strong>{regulatorUpdates.length}</strong><span>official updates</span></article><article><strong>{impactQueue.length}</strong><span>company links</span></article></div>
+        <section className="mfd-overview" aria-label="Today at a glance">
+          <div className="mfd-overview-copy"><span><i /> LIVE DISTRIBUTOR DESK</span><h2>Your workday, already prioritised.</h2><p>Start with the five developments most useful for client conversations. Act only where there is a clear reason.</p></div>
+          <div className="mfd-overview-metrics">
+            <article><i className="metric-news">01</i><div><strong>{morningFive.length || Math.min(stories.length, 5)}</strong><span>priority signals</span><small>Selected for this morning</small></div></article>
+            <article><i className="metric-regulator">02</i><div><strong>{regulatorUpdates.length}</strong><span>regulator updates</span><small>{regulatorHealth.filter((source) => source.status === "live").length}/5 official sources live</small></div></article>
+            <article><i className="metric-action">03</i><div><strong>{dailyDeskActions.length - completedDeskActions.filter((id) => dailyDeskActions.some((action) => action.id === id)).length}</strong><span>actions remaining</span><small>{completedDeskActions.filter((id) => dailyDeskActions.some((action) => action.id === id)).length} completed today</small></div></article>
+          </div>
         </section>
 
-        <div className="dashboard-flow">
-          <section className="intelligence-stream">
-            <header><div><span className="pro-kicker">YOUR MORNING 5</span><h2>Today’s work queue</h2><p>Read the context, then create only what is useful for clients.</p></div><a href="/?view=feed">All intelligence <span>↗</span></a></header>
+        <div className="mfd-workspace">
+          <section className="mfd-implications">
+            <header><div><span className="pro-kicker">YOUR MORNING 5</span><h2>Today’s practical implications</h2><p>What happened, why it matters and the safest useful client response.</p></div><a href="/?view=feed">View all news →</a></header>
+            <div className="implication-head" aria-hidden="true"><span>Priority</span><span>Development and context</span><span>Client response</span></div>
             <div>{(morningFive.length ? morningFive : stories.slice(0, 5)).map((story, index) => {
               const impact = getCompanyImpacts(story, manualCompanyLinks[String(story.id)])[0];
-              return <article key={story.id} className={index === 0 ? "lead-signal" : ""}>
-                <div className="signal-index"><span>{String(index + 1).padStart(2, "0")}</span><i /></div>
-                <div className="signal-content"><small>{story.tags.slice(0, 2).join(" / ")} · {story.source} · {story.age}</small><h3>{story.title}</h3><p>{shortStoryContext(story)}</p><footer>{impact && <span className="impact-chip">{impact.ticker} · {impact.direction}</span>}<a href={story.sourceUrl} target="_blank" rel="noreferrer">Original source ↗</a></footer></div>
-                <button type="button" className="create-update" onClick={() => openQuickDrawer(story, "note")}><span>＋</span><b>Create update</b></button>
+              return <article key={story.id} className={index === 0 ? "priority-lead" : ""}>
+                <div className="implication-rank"><strong>{String(index + 1).padStart(2, "0")}</strong><span>{story.tags[0] || "News"}</span></div>
+                <div className="implication-story"><small>{story.source} · {story.age}</small><h3>{story.title}</h3><p>{shortStoryContext(story)}</p><footer>{impact && <a href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`} className="impact-chip">{impact.ticker} · {impact.direction}</a>}<a href={story.sourceUrl} target="_blank" rel="noreferrer">Source ↗</a></footer></div>
+                <div className="implication-action"><p><strong>Do:</strong> Keep clients aligned with their agreed goals and review only if this affects their circumstances.</p><p><strong>Avoid:</strong> Acting on one headline alone.</p><button type="button" onClick={() => openQuickDrawer(story, "note")}>Create client update</button></div>
               </article>;
             })}</div>
           </section>
 
-          <aside className="action-rail">
-            <section className="action-launcher"><span className="pro-kicker">START HERE</span><h2>Create from the lead story</h2><p>Choose an output once. The selected story carries into the editor.</p><div><button type="button" onClick={() => openQuickDrawer(morningFive[0] || stories[0] || demoStories[0], "note")}><i>✎</i><span><strong>Client note</strong><small>Short, sourced and editable</small></span><b>→</b></button><button type="button" onClick={() => openQuickDrawer(morningFive[0] || stories[0] || demoStories[0], "image")}><i>▣</i><span><strong>Social card</strong><small>Branded image for sharing</small></span><b>→</b></button></div></section>
+          <aside className="mfd-action-column">
+            <section className="mfd-primary-action"><span className="pro-kicker">NEXT BEST ACTION</span><i>✎</i><h2>Prepare one useful client update.</h2><p>The lead story is selected. Write a short note first; switch to an image inside the same workspace if needed.</p><button type="button" onClick={() => openQuickDrawer(morningFive[0] || stories[0] || demoStories[0], "note")}>Create client update <span>→</span></button></section>
 
             <DailyClientDigest stories={morningFive.length ? morningFive : stories.slice(0, 5)} updates={regulatorUpdates} profile={profile} locked={trialStatus.locked} onOutput={recordTrialAction} />
 
-            <section className="watch-panel"><header><span className="pro-kicker">WATCH</span><strong>Two desks that need attention</strong></header><a href="/?view=pro&tab=regulators"><span><i className="regulator-orb">✓</i><b>Compliance inbox</b><small>{regulatorUpdates.length} official updates · {regulatorHealth.filter((source) => source.status === "live").length}/5 sources live</small></span><strong>↗</strong></a><a href="#company-impact"><span><i className="impact-orb">↗</i><b>Company Impact</b><small>{impactQueue.length} research connections · {companyWatchlist.length} watched</small></span><strong>↓</strong></a></section>
+            <section className="mfd-watch"><header><span className="pro-kicker">WATCHLIST</span><strong>Needs a quick check</strong></header><a href="/?view=pro&tab=regulators"><i>✓</i><span><b>Compliance inbox</b><small>{regulatorUpdates.length} official updates</small></span><strong>→</strong></a><a href="#company-impact"><i>↗</i><span><b>Company Impact</b><small>{impactQueue.length} relevant connections</small></span><strong>↓</strong></a></section>
 
             <details className="dashboard-checklist"><summary><div><span className="pro-kicker">TODAY’S CHECKLIST</span><strong>{completedDeskActions.filter((id) => dailyDeskActions.some((action) => action.id === id)).length}/{dailyDeskActions.length} complete</strong></div><i>Open ＋</i></summary><div>{dailyDeskActions.map((action) => <button type="button" key={action.id} className={`${completedDeskActions.includes(action.id) ? "done" : ""} ${action.newsTriggered ? "news-triggered" : ""}`} onClick={() => toggleDeskAction(action.id)}><i>{completedDeskActions.includes(action.id) ? "✓" : ""}</i><span><strong>{action.title}</strong><small>{action.reason}</small></span></button>)}</div></details>
           </aside>
