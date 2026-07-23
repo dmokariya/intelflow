@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import "./legal.css";
 
 export function LegalLayout({ kicker, title, children }: { kicker: string; title: string; children: ReactNode }) {
   return (
