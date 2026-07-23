@@ -4,7 +4,7 @@
   "description": "A professional India-first daily briefing for readers and financial product distributors.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f4f1e9",
-  "theme_color": "#15131d",
+  "background_color": "#030708",
+  "theme_color": "#071012",
   "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }
