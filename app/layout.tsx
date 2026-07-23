@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   icons: { icon: [{ url: "/favicon.svg", type: "image/svg+xml" }], shortcut: "/favicon.svg", apple: "/favicon.svg" },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f5f6f8" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#071012" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const structuredData = { "@context": "https://schema.org", "@type": "NewsMediaOrganization", name: "IntelFlow", url: "https://intelflow.in", logo: "https://intelflow.in/favicon.svg", parentOrganization: { "@type": "Organization", name: "Swarnim Capital" }, contactPoint: { "@type": "ContactPoint", email: "hello@swarnimcapital.com", contactType: "customer support", areaServed: "IN" } };
