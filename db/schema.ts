@@ -1,5 +1,23 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+export const stories = sqliteTable("stories", {
+  id: integer("id").primaryKey(),
+  title: text("title").notNull(),
+  summary: text("summary").notNull(),
+  source: text("source").notNull(),
+  sourceUrl: text("source_url").notNull(),
+  age: text("age").notNull(),
+  readTime: text("read_time").notNull(),
+  tags: text("tags", { mode: "json" }).$type<string[]>().notNull(),
+  image: text("image").notNull(),
+  imageFallback: text("image_fallback").notNull(),
+  accent: text("accent").notNull(),
+  coverage: integer("coverage").notNull(),
+  category: text("category").notNull(),
+  importance: integer("importance").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
 export const shares = sqliteTable("shares", {
   id: text("id").primaryKey(),
   ownerTokenHash: text("owner_token_hash").notNull(),

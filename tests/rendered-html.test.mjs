@@ -32,10 +32,10 @@ test("publishes the required legal and grievance surfaces", async () => {
 });
 
 test("uses bounded RSS processing and no paid AI service", async () => {
-  const feed = await readFile(new URL("../app/api/feed/route.ts", import.meta.url), "utf8");
-  assert.match(feed, /readBounded/);
-  assert.match(feed, /reader\.cancel/);
-  assert.match(feed, /assignTags/);
-  assert.match(feed, /summarise/);
-  assert.doesNotMatch(feed, /api\.openai|anthropic\.com|generativelanguage|apiKey/i);
+  const workerFeed = await readFile(new URL("../worker/cron.ts", import.meta.url), "utf8");
+  assert.match(workerFeed, /readBounded/);
+  assert.match(workerFeed, /reader\.cancel/);
+  assert.match(workerFeed, /assignTags/);
+  assert.match(workerFeed, /summarise/);
+  assert.doesNotMatch(workerFeed, /api\.openai|anthropic\.com|generativelanguage|apiKey/i);
 });
