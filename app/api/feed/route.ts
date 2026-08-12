@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-type FeedCategory = "regulation" | "india-markets" | "personal-finance" | "us-markets" | "economy" | "business" | "technology" | "world";
+type FeedCategory = "regulation" | "india-markets" | "personal-finance" | "us-markets" | "economy" | "business" | "technology" | "world" | "culture" | "health" | "sports" | "science";
 type FeedSource = {
   name: string;
   url: string;
@@ -31,6 +31,9 @@ const sources: FeedSource[] = [
   { name: "BBC Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", defaults: ["Business", "Markets"], category: "business", tier: 2 },
   { name: "BBC US & Canada", url: "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml", defaults: ["US", "World"], category: "us-markets", tier: 2 },
   { name: "BBC Technology", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", defaults: ["Technology"], category: "technology", tier: 2 },
+  { name: "BBC Culture", url: "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml", defaults: ["Entertainment", "Culture"], category: "culture", tier: 2 },
+  { name: "BBC Health", url: "https://feeds.bbci.co.uk/news/health/rss.xml", defaults: ["Health"], category: "health", tier: 2 },
+  { name: "BBC Sport", url: "https://feeds.bbci.co.uk/sport/rss.xml?edition=uk", defaults: ["Sports"], category: "sports", tier: 2 },
   { name: "BBC India", url: "https://feeds.bbci.co.uk/news/world/asia/india/rss.xml", defaults: ["India", "World"], category: "world", tier: 2 },
   { name: "BBC World", url: "https://feeds.bbci.co.uk/news/world/rss.xml", defaults: ["World"], category: "world", tier: 2 },
   { name: "BBC Science", url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml", defaults: ["Science", "World"], category: "technology", tier: 2 },
@@ -45,6 +48,8 @@ const sources: FeedSource[] = [
   { name: "NPR — Business", url: "https://feeds.npr.org/1006/rss.xml", defaults: ["Business", "US"], category: "us-markets", tier: 2 },
   { name: "CNBC — Top News", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", defaults: ["Business", "Markets", "US"], category: "us-markets", tier: 2 },
   { name: "NASA", url: "https://www.nasa.gov/rss/dyn/breaking_news.rss", defaults: ["Science", "Technology"], category: "technology", tier: 3 },
+  { name: "Times of India — Entertainment", url: "https://timesofindia.indiatimes.com/rssfeeds/1081479906.cms", defaults: ["Entertainment", "Culture", "India"], category: "culture", tier: 1 },
+  { name: "Times of India — Sports", url: "https://timesofindia.indiatimes.com/rssfeeds/4719148.cms", defaults: ["Sports", "India"], category: "sports", tier: 1 },
 ];
 
 const tagRules: Record<string, string[]> = {
@@ -65,6 +70,7 @@ const tagRules: Record<string, string[]> = {
   Cricket: ["cricket", "test match", "ipl", "bcci", "wicket", "innings"],
   Sports: ["sport", "football", "tennis", "match", "tournament", "championship"],
   Entertainment: ["film", "cinema", "actor", "music", "bollywood", "television", "streaming"],
+  Culture: ["culture", "celebrity", "film", "cinema", "actor", "music", "bollywood", "television", "streaming", "fashion", "art"],
 };
 
 const impactKeywords = [
@@ -142,14 +148,18 @@ function importanceScore(story: RawStory, tags: string[], now: number) {
   const impact = Math.min(30, impactKeywords.filter((keyword) => text.includes(keyword)).length * 5);
   const authority = story.source.tier * 11;
   const categoryBonus: Record<FeedCategory, number> = {
-    regulation: 18,
-    "india-markets": 15,
-    "personal-finance": 14,
-    "us-markets": 10,
-    economy: 13,
-    business: 7,
-    technology: 3,
-    world: 0,
+    regulation: 9,
+    "india-markets": 7,
+    "personal-finance": 6,
+    "us-markets": 5,
+    economy: 7,
+    business: 5,
+    technology: 6,
+    world: 6,
+    culture: 6,
+    health: 7,
+    sports: 5,
+    science: 6,
   };
   const quality = story.description.length > 150 ? 6 : story.description.length > 60 ? 2 : -8;
   const promotionalPenalty = promotionalPatterns.some((pattern) => text.includes(pattern)) ? 24 : 0;
@@ -251,10 +261,9 @@ function clusterAndRank(stories: RawStory[], now: number) {
 
 function balanceTopStories(stories: RankedStory[], limit = 80) {
   const openingSequence: FeedCategory[] = [
-    "regulation", "india-markets", "personal-finance", "us-markets", "economy",
-    "business", "india-markets", "personal-finance", "regulation", "us-markets",
-    "india-markets", "economy", "personal-finance", "business", "regulation",
-    "india-markets", "us-markets", "technology", "world", "india-markets",
+    "world", "technology", "culture", "india-markets", "health", "business",
+    "sports", "economy", "science", "personal-finance", "world", "culture",
+    "technology", "regulation", "business", "sports", "us-markets", "health",
   ];
   const selected: RankedStory[] = [];
   const used = new Set<string>();
