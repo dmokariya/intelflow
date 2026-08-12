@@ -1,7 +1,7 @@
 {
   "name": "IntelFlow — India’s Intelligent Daily Briefing",
   "short_name": "IntelFlow",
-  "description": "A professional India-first daily briefing for readers and financial product distributors.",
+  "description": "A calmer daily briefing for people who want to understand what is happening.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#030708",

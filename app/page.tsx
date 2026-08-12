@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, FormEvent } from "react";
+import type { FormEvent } from "react";
 
 declare global {
   interface Window {
@@ -29,11 +29,11 @@ type Story = {
   coverage: number;
 };
 
-type AppPage = "feed" | "saved" | "pro";
+type AppPage = "today" | "feed" | "explore" | "saved" | "pro";
 type ProTab = "desk" | "studio" | "regulators" | "profile";
 type StudioTool = "note" | "image";
 
-const appPages: AppPage[] = ["feed", "saved", "pro"];
+const appPages: AppPage[] = ["today", "feed", "explore", "saved", "pro"];
 const proTabs: ProTab[] = ["desk", "studio", "regulators", "profile"];
 
 type DistributorProfile = {
@@ -388,7 +388,7 @@ export default function Home() {
   const [selected, setSelected] = useState<string[]>(["AI", "India", "Technology", "Markets"]);
   const [activeTag, setActiveTag] = useState("For you");
   const [bookmarks, setBookmarks] = useState<number[]>([]);
-  const [page, setPage] = useState<AppPage>("pro");
+  const [page, setPage] = useState<AppPage>("today");
   const [proTab, setProTab] = useState<ProTab>("desk");
   const [studioTool, setStudioTool] = useState<StudioTool>("note");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -400,7 +400,6 @@ export default function Home() {
   const [lastUpdated, setLastUpdated] = useState("");
   const [activeSources, setActiveSources] = useState(0);
   const [sourceCount, setSourceCount] = useState(0);
-  const [visibleCount, setVisibleCount] = useState(20);
   const [companyWatchlist, setCompanyWatchlist] = useState<string[]>([]);
   const [manualCompanyLinks, setManualCompanyLinks] = useState<ManualCompanyLinks>({});
 
@@ -422,7 +421,7 @@ export default function Home() {
       const parameters = new URLSearchParams(window.location.search);
       const requestedPage = parameters.get("view") as AppPage | null;
       const requestedTab = parameters.get("tab");
-      const nextPage = requestedPage && appPages.includes(requestedPage) ? requestedPage : "pro";
+      const nextPage = requestedPage && appPages.includes(requestedPage) ? requestedPage : "today";
       const legacyStudioTab = requestedTab === "social" || requestedTab === "notes";
       const nextTab = legacyStudioTab ? "studio" : requestedTab && proTabs.includes(requestedTab as ProTab) ? requestedTab as ProTab : "desk";
       const requestedTool = parameters.get("tool");
@@ -430,8 +429,6 @@ export default function Home() {
       setProTab(nextTab);
       setStudioTool(requestedTool === "image" || requestedTab === "social" ? "image" : "note");
       setActiveTag(parameters.get("topic") || "For you");
-      const requestedLimit = Number(parameters.get("limit") || 20);
-      setVisibleCount(Number.isFinite(requestedLimit) ? Math.max(20, Math.min(80, requestedLimit)) : 20);
       if (legacyStudioTab) {
         const canonicalUrl = new URL(window.location.href);
         canonicalUrl.searchParams.set("tab", "studio");
@@ -478,7 +475,6 @@ export default function Home() {
     });
   }, [activeTag, selected, feedStories]);
 
-  const visibleStories = page === "saved" ? feedStories.filter((story) => bookmarks.includes(story.id)) : rankedStories;
   function toggleInterest(tag: string) {
     setSelected((current) =>
       current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag],
@@ -491,7 +487,7 @@ export default function Home() {
     storage.set("intelflow:interests", selected);
     trackEvent("onboarding_completed", { interest_count: selected.length });
     setOnboarded(true);
-    navigatePro("desk");
+    navigate("today");
   }
 
   function toggleBookmark(id: number) {
@@ -541,8 +537,8 @@ export default function Home() {
       url.searchParams.delete("story");
       url.searchParams.delete("tool");
       url.searchParams.delete("impact");
-      const topic = options.topic ?? (nextPage === "feed" ? activeTag : "For you");
-      if (nextPage === "feed" && topic !== "For you") url.searchParams.set("topic", topic);
+      const topic = options.topic ?? ((nextPage === "feed" || nextPage === "today") ? activeTag : "For you");
+      if ((nextPage === "feed" || nextPage === "today") && topic !== "For you") url.searchParams.set("topic", topic);
       else url.searchParams.delete("topic");
     }
     window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
@@ -550,7 +546,6 @@ export default function Home() {
 
   function navigate(next: AppPage) {
     setPage(next);
-    setVisibleCount(20);
     setMenuOpen(false);
     writeAppUrl(next);
   }
@@ -567,18 +562,7 @@ export default function Home() {
   function chooseTopic(topic: string) {
     setActiveTag(topic);
     setPage("feed");
-    setVisibleCount(20);
     writeAppUrl("feed", { topic });
-  }
-
-  function showMoreStories() {
-    const nextCount = Math.min(80, visibleCount + 20);
-    setVisibleCount(nextCount);
-    const url = new URL(window.location.href);
-    url.searchParams.set("view", page);
-    url.searchParams.set("limit", String(nextCount));
-    window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
-    trackEvent("feed_more_loaded", { visible_count: nextCount, topic: activeTag });
   }
 
   async function shareStory(story: Story) {
@@ -597,9 +581,9 @@ export default function Home() {
       <main className="onboarding-shell">
         <header className="onboarding-brand"><Brand /></header>
         <section className="onboarding-copy">
-          <span className="eyebrow">DISTRIBUTOR INTELLIGENCE</span>
-          <h1>What should your<br />daily desk watch?</h1>
-          <p>Pick at least three interests. We’ll tune your distributor briefing around them.</p>
+          <span className="eyebrow">YOUR DAILY BRIEF</span>
+          <h1>What are you<br />curious about?</h1>
+          <p>Pick a few things you want to understand. Your feed will get smarter from there.</p>
         </section>
         <section className="interest-grid" aria-label="Choose your interests">
           {interests.map(([tag, label, icon]) => {
@@ -620,7 +604,7 @@ export default function Home() {
         </section>
         <footer className="onboarding-footer">
           <span>{selected.length} selected</span>
-          <button disabled={selected.length < 3} onClick={finishOnboarding}>Build my briefing <span>→</span></button>
+          <button disabled={selected.length < 3} onClick={finishOnboarding}>Start my brief <span>→</span></button>
         </footer>
       </main>
     );
@@ -630,7 +614,7 @@ export default function Home() {
     <main className="app-shell">
       <header className="topbar">
         <Brand />
-        <span className="distributor-badge">BUILT FOR DISTRIBUTORS</span>
+        <span className="distributor-badge">YOUR DAILY SIGNAL</span>
         <div className="top-actions">
           <a className="support-link" href="/contact">Contact</a>
           <button className="avatar-button" aria-label="Open account and site menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>{profile.name?.trim().charAt(0).toUpperCase() || "IF"}</button>
@@ -638,10 +622,10 @@ export default function Home() {
         {menuOpen && (
           <div className="profile-menu">
             <span className="profile-menu-label">YOUR INTELFLOW</span>
-            <strong>{profile.name || "Guest distributor"}</strong>
-            <span>Your preferences, profile and trial progress stay on this device.</span>
-            <button onClick={() => navigatePro("profile")}>Distributor profile</button>
-            <button className="profile-menu-secondary" onClick={() => { storage.set("intelflow:onboarded", false); setMenuOpen(false); setOnboarded(false); }}>Edit feed interests</button>
+            <strong>{profile.name || "Your IntelFlow"}</strong>
+            <span>Your interests, saved stories and reading progress stay on this device.</span>
+            <button onClick={() => navigatePro("profile")}>Professional settings</button>
+            <button className="profile-menu-secondary" onClick={() => { storage.set("intelflow:onboarded", false); setMenuOpen(false); setOnboarded(false); }}>Edit my interests</button>
             <div className="profile-menu-links">
               <a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/disclosure">Disclosure</a><a href="/contact">Contact</a>
             </div>
@@ -650,111 +634,115 @@ export default function Home() {
       </header>
 
       <nav className="primary-nav" aria-label="Primary navigation">
-        <button className={page === "pro" && proTab === "desk" ? "active" : ""} onClick={() => navigatePro("desk")}><span>⌂</span><b>Dashboard</b></button>
-        <button className={page === "feed" ? "active" : ""} onClick={() => navigate("feed")}><span>▤</span><b>News</b></button>
-        <button className={page === "pro" && proTab === "regulators" ? "active" : ""} onClick={() => navigatePro("regulators")}><span>✓</span><b>Compliance</b></button>
-        <button className={page === "pro" && proTab === "studio" ? "active" : ""} onClick={() => navigatePro("studio", explainStory, studioTool)}><span>＋</span><b>Create</b></button>
+        <button className={page === "today" ? "active" : ""} onClick={() => navigate("today")}><span>⌂</span><b>Today</b></button>
+        <button className={page === "feed" ? "active" : ""} onClick={() => navigate("feed")}><span>▤</span><b>Feed</b></button>
+        <button className={page === "explore" ? "active" : ""} onClick={() => navigate("explore")}><span>◌</span><b>Explore</b></button>
         <button className={page === "saved" ? "active" : ""} onClick={() => navigate("saved")}><span>☆</span><b>Library</b></button>
+        <button className={page === "pro" ? "active" : ""} onClick={() => navigatePro("desk")}><span>✦</span><b>Pro</b></button>
       </nav>
 
       <div className="app-main">
 
-      {page === "feed" && (
-        <>
-          <section className="welcome-row">
-            <div>
-              <span className="date-label">LIVE · INDIA + UNITED STATES</span>
-              <h1>News intelligence.</h1>
-              <p>{visibleStories.length} signals selected for your interests{lastUpdated ? ` · Updated ${lastUpdated}` : ""}{sourceCount ? ` · ${activeSources}/${sourceCount} sources live` : ""}.</p>
-            </div>
-            <button className={`refresh-feed ${refreshing ? "refreshing" : ""}`} onClick={() => loadFeed(true)} disabled={refreshing}><span>↻</span>{refreshing ? "Updating" : "Refresh"}</button>
-          </section>
-
-          <aside className="swarnim-credit" aria-label="IntelFlow by Swarnim Capital">
-            <span>IntelFlow is a product of Swarnim Capital</span>
-            <a href="https://swarnimcapital.com" target="_blank" rel="noreferrer">Visit Swarnim Capital ↗</a>
-          </aside>
-
-          <section className="live-pulse" aria-label="Live briefing pulse">
-            <div><i /><span>LIVE PULSE</span></div>
-            <p><strong>{feedStories.filter((story) => story.tags.includes("India")).length}</strong> India</p>
-            <p><strong>{feedStories.filter((story) => story.tags.includes("Markets")).length}</strong> Markets</p>
-            <p><strong>{feedStories.filter((story) => story.tags.includes("Regulation")).length}</strong> Regulatory</p>
-            <p><strong>{feedStories.filter((story) => story.tags.includes("US")).length}</strong> US</p>
-          </section>
-
-          <a className="impact-radar" href="/?view=pro&tab=desk&section=company-impact">
-            <span className="impact-radar-icon">↗</span>
-            <div><small>NEW · COMPANY IMPACT</small><strong>{feedStories.filter((story) => getCompanyImpacts(story, manualCompanyLinks[String(story.id)]).length).length} stories linked to listed companies</strong><p>See the transmission channel, what to verify and today’s research queue.</p></div>
-            <b>{companyWatchlist.length ? `${companyWatchlist.length} watched` : "Open radar"} →</b>
-          </a>
-
-          <nav className="tag-strip" aria-label="News filters">
-            {["For you", ...selected].map((tag) => (
-              <button key={tag} className={activeTag === tag ? "active" : ""} onClick={() => chooseTopic(tag)}>
-                {tag}
-              </button>
-            ))}
-          </nav>
-        </>
+      {(page === "today" || page === "feed" || page === "explore" || page === "saved") && (
+        <ConsumerHub
+          page={page}
+          stories={rankedStories}
+          savedStories={feedStories.filter((story) => bookmarks.includes(story.id))}
+          bookmarks={bookmarks}
+          interests={selected}
+          activeTopic={activeTag}
+          refreshing={refreshing}
+          lastUpdated={lastUpdated}
+          onRefresh={() => loadFeed(true)}
+          onNavigate={navigate}
+          onChooseTopic={chooseTopic}
+          onUpdateInterests={(topics) => { setSelected(topics); storage.set("intelflow:interests", topics); }}
+          onToggleBookmark={toggleBookmark}
+          onShare={shareStory}
+          onOpenPro={(story) => navigatePro("studio", story, "note")}
+        />
       )}
 
       {page === "pro" && <DistributorPro stories={feedStories} trial={trial} setTrial={setTrial} profile={profile} setProfile={setProfile} initialStory={explainStory} tab={proTab} tool={studioTool} navigateTab={navigatePro} companyWatchlist={companyWatchlist} manualCompanyLinks={manualCompanyLinks} toggleCompanyWatch={toggleCompanyWatch} attachCompanyToStory={attachCompanyToStory} />}
 
-      {(page === "feed" || page === "saved") && (
-        <section className="story-stage">
-          {page === "saved" && <div className="section-heading"><span>YOUR LIBRARY</span><h1>Saved intelligence</h1></div>}
-          {!visibleStories.length ? (
-            <div className="empty-state">
-              <span>☆</span><h2>Nothing saved yet</h2><p>Tap the bookmark on any briefing to keep it here.</p>
-              <button onClick={() => navigate("feed")}>Return to briefing</button>
-            </div>
-          ) : (
-            <>
-            <div className="story-stream">
-              {visibleStories.slice(0, visibleCount).map((story, index) => (
-                <article className={`story-card ${index === 0 ? "lead-story" : ""}`} key={story.id} style={{ "--story-color": topicColor(story.tags[0]), borderTopColor: topicColor(story.tags[0]) } as CSSProperties}>
-                  <div className="story-image-wrap">
-                    <img src={story.image} alt="" className="story-image" loading={index > 2 ? "lazy" : "eager"} />
-                    <div className="image-shade" />
-                    <span className="story-number">{String(index + 1).padStart(2, "0")}</span>
-                    <div className="story-tags">
-                      {story.tags.map((tag) => <span key={tag} style={{ backgroundColor: topicColor(tag) }}>{tag}</span>)}
-                    </div>
-                    <button
-                      className={`bookmark ${bookmarks.includes(story.id) ? "saved" : ""}`}
-                      aria-label={bookmarks.includes(story.id) ? "Remove bookmark" : "Save story"}
-                      onClick={() => toggleBookmark(story.id)}
-                    >{bookmarks.includes(story.id) ? "★" : "☆"}</button>
-                  </div>
-                  <div className="story-body">
-                    <div className="story-meta"><span>{story.source}</span><i /> <span>{story.age}</span></div>
-                    <h2><a className="story-title-link" href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>{story.title}</a></h2>
-                    <p>{story.summary}</p>
-                    <StoryCompanyImpact story={story} manualTickers={manualCompanyLinks[String(story.id)] || []} watchedTickers={companyWatchlist} />
-                    <div className="coverage-row">
-                      <span className="coverage-stack"><i /><i /><i /></span>
-                      <span>{story.coverage > 1 ? `Connected from ${story.coverage} reports` : "Briefed from the original report"}</span>
-                    </div>
-                    <div className="story-actions">
-                      <a href={story.sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackEvent("source_opened", { item_id: String(story.id), source: story.source })}>Read full story <span>↗</span></a>
-                      {story.tags.some((tag) => ["Markets", "Business", "India", "Regulation", "Personal Finance", "Economy", "US"].includes(tag)) && <button className="explain-button" onClick={() => { trackEvent("client_note_created", { item_id: String(story.id), entry_point: "feed" }); navigatePro("studio", story, "note"); }}>Explain to client</button>}
-                      <button className="share-button" onClick={() => void shareStory(story)} aria-label={`Share ${story.title}`}><span>Share</span><i>⤴</i></button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-            {visibleStories.length > visibleCount && <button className="feed-load-more" onClick={showMoreStories}>Load 20 more signals <span>{visibleCount} of {visibleStories.length}</span></button>}
-            </>
-          )}
-          <p className="automated-note">Briefs are automatically condensed from attributed sources. Verify important information with the original publisher.</p>
-        </section>
-      )}
 
       </div>
     </main>
   );
+}
+
+function ConsumerHub({ page, stories, savedStories, bookmarks, interests, activeTopic, refreshing, lastUpdated, onRefresh, onNavigate, onChooseTopic, onUpdateInterests, onToggleBookmark, onShare, onOpenPro }: {
+  page: AppPage;
+  stories: Story[];
+  savedStories: Story[];
+  bookmarks: number[];
+  interests: string[];
+  activeTopic: string;
+  refreshing: boolean;
+  lastUpdated: string;
+  onRefresh: () => void;
+  onNavigate: (page: AppPage) => void;
+  onChooseTopic: (topic: string) => void;
+  onUpdateInterests: (topics: string[]) => void;
+  onToggleBookmark: (id: number) => void;
+  onShare: (story: Story) => Promise<void>;
+  onOpenPro: (story: Story) => void;
+}) {
+  const [storyArc, setStoryArc] = useState<Story | null>(null);
+  const [briefDone, setBriefDone] = useState(() => storage.get("intelflow:brief-complete", "") === new Date().toDateString());
+  const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
+  const dailyStories = stories.slice(0, 5);
+  const currentStories = page === "saved" ? savedStories : page === "today" ? dailyStories : stories;
+  const topicGroups = interests.map((topic) => ({ topic, stories: stories.filter((story) => story.tags.includes(topic)).slice(0, 3) })).filter((group) => group.stories.length);
+  const finishBrief = () => {
+    storage.set("intelflow:brief-complete", new Date().toDateString());
+    setBriefDone(true);
+    trackEvent("daily_brief_completed", { story_count: dailyStories.length });
+  };
+  const answerDailySpark = (answer: string) => {
+    const topics = answer === "Culture & gossip" ? ["Entertainment", "Culture"] : answer === "Useful explainers" ? ["Technology", "Science"] : ["India", "World"];
+    onUpdateInterests(Array.from(new Set([...topics, ...interests])).slice(0, 8));
+    setQuizAnswer(answer);
+    trackEvent("daily_preference_selected", { answer });
+  };
+
+  if (page === "explore") return <section className="consumer-surface explore-surface">
+    <header className="consumer-heading"><span>EXPLORE</span><h1>Follow your curiosity.</h1><p>Choose a lane when you want it. Your main feed stays uncluttered.</p></header>
+    <div className="topic-pills" aria-label="Topics you follow">{interests.map((topic) => <button key={topic} className={activeTopic === topic ? "active" : ""} onClick={() => onChooseTopic(topic)}>{topic}</button>)}</div>
+    <div className="topic-hubs">{topicGroups.map(({ topic, stories: groupStories }) => <section key={topic} className="topic-hub"><div><span>{topic}</span><button onClick={() => onChooseTopic(topic)}>Open →</button></div>{groupStories.map((story) => <MiniStory key={story.id} story={story} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => setStoryArc(story)} />)}</section>)}</div>
+    {storyArc && <StoryArc story={storyArc} onClose={() => setStoryArc(null)} onShare={onShare} />}
+  </section>;
+
+  return <section className="consumer-surface">
+    {page === "today" && <>
+      <header className="today-hero">
+        <div><span className="live-label"><i /> TODAY · {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}</span><h1>Your five-minute<br />catch-up.</h1><p>{briefDone ? "You’re caught up. Explore a new thread, or come back when the world changes." : "A calmer way to know what people are talking about."}</p></div>
+        <button className={`brief-ring ${briefDone ? "done" : ""}`} onClick={finishBrief} aria-label="Mark daily brief complete"><strong>{briefDone ? "✓" : `${dailyStories.length}`}</strong><small>{briefDone ? "DONE" : "STORIES"}</small></button>
+      </header>
+      <section className="quick-question" aria-label="Daily question"><span>DAILY SPARK</span><strong>What do you want more of today?</strong><div>{["Big stories", "Culture & gossip", "Useful explainers"].map((answer) => <button className={quizAnswer === answer ? "chosen" : ""} key={answer} onClick={() => answerDailySpark(answer)}>{answer}</button>)}</div></section>
+    </>}
+    {page === "feed" && <header className="feed-heading"><div><span>{activeTopic === "For you" ? "YOUR FLOW" : activeTopic.toUpperCase()}</span><h1>Keep scrolling.<br />Keep up.</h1><p>{lastUpdated ? `Updated ${lastUpdated}` : "Fresh stories, with the noise turned down."}</p></div><button className={refreshing ? "is-refreshing" : ""} onClick={onRefresh} disabled={refreshing} aria-label="Refresh stories">↻</button></header>}
+    {page === "saved" && <header className="feed-heading"><div><span>YOUR LIBRARY</span><h1>Worth keeping.</h1><p>Stories you saved to return to.</p></div></header>}
+    {!currentStories.length ? <div className="consumer-empty"><span>☆</span><h2>Nothing here yet.</h2><p>Save a story that you want to revisit.</p><button onClick={() => onNavigate("feed")}>Go to your flow</button></div> : <div className="consumer-feed">{currentStories.map((story, index) => <ConsumerStory key={story.id} story={story} index={index} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => setStoryArc(story)} onShare={() => void onShare(story)} onOpenPro={() => onOpenPro(story)} />)}</div>}
+    {page !== "saved" && <button className="discover-more" onClick={() => onNavigate(page === "today" ? "feed" : "explore")}>{page === "today" ? "Keep exploring" : "Explore your topics"} <span>→</span></button>}
+    {storyArc && <StoryArc story={storyArc} onClose={() => setStoryArc(null)} onShare={onShare} />}
+  </section>;
+}
+
+function ConsumerStory({ story, index, saved, onSave, onOpen, onShare, onOpenPro }: { story: Story; index: number; saved: boolean; onSave: () => void; onOpen: () => void; onShare: () => void; onOpenPro: () => void }) {
+  return <article className={`consumer-story ${index === 0 ? "featured" : ""}`}>
+    <button className="story-media" onClick={onOpen} aria-label={`Understand ${story.title}`}><img src={story.image} alt="" loading={index > 2 ? "lazy" : "eager"} /><span>{story.tags[0] || "Now"}</span></button>
+    <div className="consumer-copy"><div className="consumer-meta"><span>{story.source}</span><i /> <span>{story.age}</span><button onClick={onSave} aria-label={saved ? "Remove saved story" : "Save story"}>{saved ? "★" : "☆"}</button></div><h2><button onClick={onOpen}>{story.title}</button></h2><p>{story.summary}</p><div className="why-matters"><span>WHY IT MATTERS</span><p>{shortStoryContext(story)}</p></div><footer><button onClick={onOpen}>StoryArc <span>+</span></button><a href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>Read source ↗</a><button onClick={onShare} aria-label={`Share ${story.title}`}>⤴</button>{story.tags.some((tag) => ["Markets", "Business", "Regulation"].includes(tag)) && <button className="pro-nudge" onClick={onOpenPro}>Pro</button>}</footer></div>
+  </article>;
+}
+
+function MiniStory({ story, saved, onSave, onOpen }: { story: Story; saved: boolean; onSave: () => void; onOpen: () => void }) {
+  return <article className="mini-story"><button onClick={onOpen}><img src={story.image} alt="" /><span>{story.title}</span></button><button onClick={onSave} aria-label={saved ? "Remove saved story" : "Save story"}>{saved ? "★" : "☆"}</button></article>;
+}
+
+function StoryArc({ story, onClose, onShare }: { story: Story; onClose: () => void; onShare: (story: Story) => Promise<void> }) {
+  const timeline = ["It surfaced", "Why people noticed", "What it could change"];
+  return <div className="story-arc-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="story-arc" role="dialog" aria-modal="true" aria-label="Story context"><button className="arc-close" onClick={onClose} aria-label="Close story context">×</button><span>{story.tags.slice(0, 2).join(" · ")}</span><h2>{story.title}</h2><p className="arc-summary">{story.summary}</p><section><span>STORYARC</span>{timeline.map((item, index) => <div key={item}><i>{String(index + 1).padStart(2, "0")}</i><div><strong>{item}</strong><p>{index === 0 ? `${story.source} reported this ${story.age}.` : index === 1 ? shortStoryContext(story) : "Follow the original reporting for the next confirmed update."}</p></div></div>)}</section><footer><a href={story.sourceUrl} target="_blank" rel="noreferrer">Open original ↗</a><button onClick={() => void onShare(story)}>Share</button></footer></aside></div>;
 }
 
 function Brand() {
