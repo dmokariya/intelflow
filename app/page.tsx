@@ -6,8 +6,11 @@ import type { FormEvent } from "react";
 declare global {
   interface Window {
     dataLayer?: Array<Record<string, unknown>>;
+    google?: any;
   }
 }
+
+const googleClientId = "530840408871-o2dq3b2bfo4346n5at0i44f7oa526h44.apps.googleusercontent.com";
 
 function trackEvent(name: string, parameters: Record<string, string | number | boolean> = {}) {
   if (typeof window === "undefined") return;
@@ -29,11 +32,11 @@ type Story = {
   coverage: number;
 };
 
-type AppPage = "today" | "feed" | "explore" | "saved" | "pro";
+type AppPage = "feed" | "explore" | "saved" | "pro";
 type ProTab = "desk" | "studio" | "regulators" | "profile";
 type StudioTool = "note" | "image";
 
-const appPages: AppPage[] = ["today", "feed", "explore", "saved", "pro"];
+const appPages: AppPage[] = ["feed", "explore", "saved", "pro"];
 const proTabs: ProTab[] = ["desk", "studio", "regulators", "profile"];
 
 type DistributorProfile = {
@@ -45,6 +48,8 @@ type DistributorProfile = {
   brandColor: string;
   logo: string;
 };
+type PersonalProfile = { name: string; title: string; photo: string; email: string; googleSub: string };
+const defaultPersonalProfile: PersonalProfile = { name: "", title: "", photo: "", email: "", googleSub: "" };
 
 type TrialState = { startedAt: number; actions: number };
 type ShareStats = { views: number; sourceClicks: number; contactClicks: number; expiresAt: number; revokedAt: number | null };
@@ -382,19 +387,43 @@ const storage = {
   },
 };
 
+function imageFrom(url: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => { const image = new Image(); image.crossOrigin = "anonymous"; image.onload = () => resolve(image); image.onerror = reject; image.src = url; });
+}
+
+async function createShareImage(story: Story, profile: PersonalProfile) {
+  const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = 1350;
+  const context = canvas.getContext("2d"); if (!context) throw new Error("Canvas unavailable");
+  const shades = ["#0b2d27", "#102e45", "#3a1d4e", "#45253c"]; const shade = shades[story.id % shades.length];
+  const gradient = context.createLinearGradient(0, 0, 1080, 1350); gradient.addColorStop(0, shade); gradient.addColorStop(1, "#060b0d"); context.fillStyle = gradient; context.fillRect(0, 0, 1080, 1350);
+  context.fillStyle = "#c8f229"; context.beginPath(); context.arc(930, 150, 170, 0, Math.PI * 2); context.fill(); context.globalAlpha = .12; context.fillStyle = "#f7efdf"; context.beginPath(); context.arc(110, 840, 320, 0, Math.PI * 2); context.fill(); context.globalAlpha = 1;
+  context.fillStyle = "#c8f229"; context.font = "800 28px Arial"; context.fillText((story.tags[0] || "NOW").toUpperCase(), 78, 120);
+  context.fillStyle = "#f7efdf"; context.font = "700 70px Georgia";
+  const words = story.title.split(/\s+/); let line = ""; let y = 245;
+  words.forEach((word) => { if (context.measureText(`${line} ${word}`).width > 850 && line) { context.fillText(line, 78, y); y += 88; line = word; } else line = line ? `${line} ${word}` : word; }); if (line) context.fillText(line, 78, y);
+  context.fillStyle = "rgba(247,239,223,.76)"; context.font = "600 27px Arial"; context.fillText(`SOURCE · ${story.source.toUpperCase()}`, 78, y + 74);
+  context.fillStyle = "rgba(247,239,223,.12)"; context.fillRect(58, 1050, 964, 2);
+  try { const photo = await imageFrom(profile.photo); context.save(); context.beginPath(); context.arc(154, 1174, 70, 0, Math.PI * 2); context.clip(); context.drawImage(photo, 84, 1104, 140, 140); context.restore(); } catch { context.fillStyle = "#c8f229"; context.beginPath(); context.arc(154, 1174, 70, 0, Math.PI * 2); context.fill(); context.fillStyle = "#071012"; context.font = "800 52px Arial"; context.fillText(profile.name.slice(0, 1).toUpperCase(), 137, 1192); }
+  context.fillStyle = "#f7efdf"; context.font = "800 34px Arial"; context.fillText(profile.name, 250, 1165); context.fillStyle = "rgba(247,239,223,.7)"; context.font = "500 25px Arial"; context.fillText(profile.title || "Sharing what matters", 250, 1206);
+  context.fillStyle = "#c8f229"; context.font = "800 26px Arial"; context.fillText("INTELFLOW", 78, 1280); context.fillStyle = "rgba(247,239,223,.62)"; context.font = "600 20px Arial"; context.fillText("YOUR DAILY FLOW", 78, 1315);
+  return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Image creation failed")), "image/png"));
+}
+
 export default function Home() {
   const [ready, setReady] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
-  const [selected, setSelected] = useState<string[]>(["AI", "India", "Technology", "Markets"]);
+  const [selected, setSelected] = useState<string[]>(["India", "World", "Entertainment", "Technology", "Sports", "Health"]);
   const [activeTag, setActiveTag] = useState("For you");
   const [bookmarks, setBookmarks] = useState<number[]>([]);
-  const [page, setPage] = useState<AppPage>("today");
+  const [page, setPage] = useState<AppPage>("feed");
   const [proTab, setProTab] = useState<ProTab>("desk");
   const [studioTool, setStudioTool] = useState<StudioTool>("note");
   const [menuOpen, setMenuOpen] = useState(false);
   const [feedStories, setFeedStories] = useState<Story[]>(demoStories);
   const [trial, setTrial] = useState<TrialState | null>(null);
   const [profile, setProfile] = useState<DistributorProfile>(defaultDistributorProfile);
+  const [personalProfile, setPersonalProfile] = useState<PersonalProfile>(defaultPersonalProfile);
+  const [personalOpen, setPersonalOpen] = useState(false);
   const [explainStory, setExplainStory] = useState<Story | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -405,7 +434,10 @@ export default function Home() {
 
   useEffect(() => {
     setOnboarded(storage.get("intelflow:onboarded", false));
-    setSelected(storage.get("intelflow:interests", ["AI", "India", "Technology", "Markets"]));
+    const freshInterests = ["India", "World", "Entertainment", "Technology", "Sports", "Health"];
+    const interestVersion = storage.get("intelflow:interest-version", 0);
+    setSelected(interestVersion < 2 ? freshInterests : storage.get("intelflow:interests", freshInterests));
+    if (interestVersion < 2) storage.set("intelflow:interest-version", 2);
     setBookmarks(storage.get("intelflow:bookmarks", []));
     setCompanyWatchlist(storage.get(companyWatchlistStorageKey, []));
     setManualCompanyLinks(storage.get(manualCompanyLinksStorageKey, {}));
@@ -417,11 +449,12 @@ export default function Home() {
       setTrial(migratedTrial);
     }
     setProfile({ ...defaultDistributorProfile, ...storage.get("intelflow:distributor-profile", defaultDistributorProfile) });
+    setPersonalProfile({ ...defaultPersonalProfile, ...storage.get("intelflow:personal-profile", defaultPersonalProfile) });
     const applyUrlState = () => {
       const parameters = new URLSearchParams(window.location.search);
       const requestedPage = parameters.get("view") as AppPage | null;
       const requestedTab = parameters.get("tab");
-      const nextPage = requestedPage && appPages.includes(requestedPage) ? requestedPage : "today";
+      const nextPage = requestedPage && appPages.includes(requestedPage) ? requestedPage : "feed";
       const legacyStudioTab = requestedTab === "social" || requestedTab === "notes";
       const nextTab = legacyStudioTab ? "studio" : requestedTab && proTabs.includes(requestedTab as ProTab) ? requestedTab as ProTab : "desk";
       const requestedTool = parameters.get("tool");
@@ -444,6 +477,25 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const script = document.createElement("script"); script.src = "https://accounts.google.com/gsi/client"; script.async = true;
+    script.onload = () => window.google?.accounts.id.initialize({ client_id: googleClientId, callback: async ({ credential }: { credential: string }) => {
+      const response = await fetch("/api/auth/google", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credential }) });
+      if (!response.ok) return;
+      const result = await response.json() as { profile: PersonalProfile };
+      setPersonalProfile((current) => { const next = { ...result.profile, title: current.title, photo: current.photo || result.profile.photo }; storage.set("intelflow:personal-profile", next); return next; });
+      setPersonalOpen(true); trackEvent("google_sign_in", { method: "google" });
+    }});
+    document.head.append(script); return () => script.remove();
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/auth/google", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((result: { profile?: PersonalProfile } | null) => {
+      if (!result?.profile) return;
+      setPersonalProfile((current) => { const next = { ...result.profile!, title: current.title, photo: current.photo || result.profile!.photo }; storage.set("intelflow:personal-profile", next); return next; });
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     const storyId = new URLSearchParams(window.location.search).get("story");
     if (!storyId) {
       setExplainStory(null);
@@ -458,7 +510,10 @@ export default function Home() {
     fetch(`/api/feed${force ? `?refresh=${Date.now()}` : ""}`, { cache: force ? "no-store" : "default" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Feed unavailable")))
       .then((data: { stories?: Story[]; generatedAt?: string; activeSources?: number; sources?: number }) => {
-        if (data.stories?.length) setFeedStories(data.stories);
+        if (data.stories?.length) {
+          const shuffled = [...data.stories].sort(() => Math.random() - .5);
+          setFeedStories(force ? shuffled : data.stories);
+        }
         if (data.generatedAt) setLastUpdated(new Date(data.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
         if (typeof data.activeSources === "number") setActiveSources(data.activeSources);
         if (typeof data.sources === "number") setSourceCount(data.sources);
@@ -487,7 +542,7 @@ export default function Home() {
     storage.set("intelflow:interests", selected);
     trackEvent("onboarding_completed", { interest_count: selected.length });
     setOnboarded(true);
-    navigate("today");
+    navigate("feed");
   }
 
   function toggleBookmark(id: number) {
@@ -537,8 +592,8 @@ export default function Home() {
       url.searchParams.delete("story");
       url.searchParams.delete("tool");
       url.searchParams.delete("impact");
-      const topic = options.topic ?? ((nextPage === "feed" || nextPage === "today") ? activeTag : "For you");
-      if ((nextPage === "feed" || nextPage === "today") && topic !== "For you") url.searchParams.set("topic", topic);
+      const topic = options.topic ?? (nextPage === "feed" ? activeTag : "For you");
+      if (nextPage === "feed" && topic !== "For you") url.searchParams.set("topic", topic);
       else url.searchParams.delete("topic");
     }
     window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
@@ -566,13 +621,16 @@ export default function Home() {
   }
 
   async function shareStory(story: Story) {
-    trackEvent("share", { method: navigator.share ? "native" : "clipboard", content_type: "story", item_id: String(story.id) });
-    if (navigator.share) {
-      await navigator.share({ title: story.title, text: story.summary, url: story.sourceUrl });
-      return;
-    }
-    await navigator.clipboard?.writeText(story.sourceUrl);
+    if (!personalProfile.name) { setPersonalOpen(true); return; }
+    const image = await createShareImage(story, personalProfile);
+    const file = new File([image], "intelflow-story.png", { type: "image/png" });
+    trackEvent("story_image_created", { item_id: String(story.id) });
+    if (navigator.share && navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: story.title, text: `${story.title} · ${story.source}` }); return; }
+    const link = document.createElement("a"); link.href = URL.createObjectURL(image); link.download = "intelflow-story.png"; link.click(); window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }
+
+  function openGoogleLogin() { window.google?.accounts.id.prompt(); }
+  function savePersonalProfile(next: PersonalProfile) { setPersonalProfile(next); storage.set("intelflow:personal-profile", next); }
 
   if (!ready) return <main className="loading-shell" aria-label="Loading IntelFlow" />;
 
@@ -623,9 +681,8 @@ export default function Home() {
           <div className="profile-menu">
             <span className="profile-menu-label">YOUR INTELFLOW</span>
             <strong>{profile.name || "Your IntelFlow"}</strong>
-            <span>Your interests, saved stories and reading progress stay on this device.</span>
-            <button onClick={() => navigatePro("profile")}>Professional settings</button>
-            <button className="profile-menu-secondary" onClick={() => { storage.set("intelflow:onboarded", false); setMenuOpen(false); setOnboarded(false); }}>Edit my interests</button>
+            <span>Personal details and your public sharing profile.</span>
+            <button onClick={() => { setMenuOpen(false); setPersonalOpen(true); }}>Personal details</button>
             <div className="profile-menu-links">
               <a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/disclosure">Disclosure</a><a href="/contact">Contact</a>
             </div>
@@ -634,16 +691,14 @@ export default function Home() {
       </header>
 
       <nav className="primary-nav" aria-label="Primary navigation">
-        <button className={page === "today" ? "active" : ""} onClick={() => navigate("today")}><span>⌂</span><b>Today</b></button>
         <button className={page === "feed" ? "active" : ""} onClick={() => navigate("feed")}><span>▤</span><b>Feed</b></button>
         <button className={page === "explore" ? "active" : ""} onClick={() => navigate("explore")}><span>◌</span><b>Explore</b></button>
         <button className={page === "saved" ? "active" : ""} onClick={() => navigate("saved")}><span>☆</span><b>Library</b></button>
-        <button className={page === "pro" ? "active" : ""} onClick={() => navigatePro("desk")}><span>✦</span><b>Pro</b></button>
       </nav>
 
       <div className="app-main">
 
-      {(page === "today" || page === "feed" || page === "explore" || page === "saved") && (
+      {(page === "feed" || page === "explore" || page === "saved") && (
         <ConsumerHub
           page={page}
           stories={rankedStories}
@@ -656,10 +711,8 @@ export default function Home() {
           onRefresh={() => loadFeed(true)}
           onNavigate={navigate}
           onChooseTopic={chooseTopic}
-          onUpdateInterests={(topics) => { setSelected(topics); storage.set("intelflow:interests", topics); }}
           onToggleBookmark={toggleBookmark}
           onShare={shareStory}
-          onOpenPro={(story) => navigatePro("studio", story, "note")}
         />
       )}
 
@@ -667,11 +720,12 @@ export default function Home() {
 
 
       </div>
+      {personalOpen && <PersonalDetails profile={personalProfile} onClose={() => setPersonalOpen(false)} onSave={savePersonalProfile} onGoogleLogin={openGoogleLogin} />}
     </main>
   );
 }
 
-function ConsumerHub({ page, stories, savedStories, bookmarks, interests, activeTopic, refreshing, lastUpdated, onRefresh, onNavigate, onChooseTopic, onUpdateInterests, onToggleBookmark, onShare, onOpenPro }: {
+function ConsumerHub({ page, stories, savedStories, bookmarks, interests, activeTopic, refreshing, lastUpdated, onRefresh, onNavigate, onChooseTopic, onToggleBookmark, onShare }: {
   page: AppPage;
   stories: Story[];
   savedStories: Story[];
@@ -683,28 +737,12 @@ function ConsumerHub({ page, stories, savedStories, bookmarks, interests, active
   onRefresh: () => void;
   onNavigate: (page: AppPage) => void;
   onChooseTopic: (topic: string) => void;
-  onUpdateInterests: (topics: string[]) => void;
   onToggleBookmark: (id: number) => void;
   onShare: (story: Story) => Promise<void>;
-  onOpenPro: (story: Story) => void;
 }) {
   const [storyArc, setStoryArc] = useState<Story | null>(null);
-  const [briefDone, setBriefDone] = useState(() => storage.get("intelflow:brief-complete", "") === new Date().toDateString());
-  const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
-  const dailyStories = stories.slice(0, 5);
-  const currentStories = page === "saved" ? savedStories : page === "today" ? dailyStories : stories;
+  const currentStories = page === "saved" ? savedStories : stories;
   const topicGroups = interests.map((topic) => ({ topic, stories: stories.filter((story) => story.tags.includes(topic)).slice(0, 3) })).filter((group) => group.stories.length);
-  const finishBrief = () => {
-    storage.set("intelflow:brief-complete", new Date().toDateString());
-    setBriefDone(true);
-    trackEvent("daily_brief_completed", { story_count: dailyStories.length });
-  };
-  const answerDailySpark = (answer: string) => {
-    const topics = answer === "Culture & gossip" ? ["Entertainment", "Culture"] : answer === "Useful explainers" ? ["Technology", "Science"] : ["India", "World"];
-    onUpdateInterests(Array.from(new Set([...topics, ...interests])).slice(0, 8));
-    setQuizAnswer(answer);
-    trackEvent("daily_preference_selected", { answer });
-  };
 
   if (page === "explore") return <section className="consumer-surface explore-surface">
     <header className="consumer-heading"><span>EXPLORE</span><h1>Follow your curiosity.</h1><p>Choose a lane when you want it. Your main feed stays uncluttered.</p></header>
@@ -714,25 +752,18 @@ function ConsumerHub({ page, stories, savedStories, bookmarks, interests, active
   </section>;
 
   return <section className="consumer-surface">
-    {page === "today" && <>
-      <header className="today-hero">
-        <div><span className="live-label"><i /> TODAY · {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }).toUpperCase()}</span><h1>Your five-minute<br />catch-up.</h1><p>{briefDone ? "You’re caught up. Explore a new thread, or come back when the world changes." : "A calmer way to know what people are talking about."}</p></div>
-        <button className={`brief-ring ${briefDone ? "done" : ""}`} onClick={finishBrief} aria-label="Mark daily brief complete"><strong>{briefDone ? "✓" : `${dailyStories.length}`}</strong><small>{briefDone ? "DONE" : "STORIES"}</small></button>
-      </header>
-      <section className="quick-question" aria-label="Daily question"><span>DAILY SPARK</span><strong>What do you want more of today?</strong><div>{["Big stories", "Culture & gossip", "Useful explainers"].map((answer) => <button className={quizAnswer === answer ? "chosen" : ""} key={answer} onClick={() => answerDailySpark(answer)}>{answer}</button>)}</div></section>
-    </>}
     {page === "feed" && <header className="feed-heading"><div><span>{activeTopic === "For you" ? "YOUR FLOW" : activeTopic.toUpperCase()}</span><h1>Keep scrolling.<br />Keep up.</h1><p>{lastUpdated ? `Updated ${lastUpdated}` : "Fresh stories, with the noise turned down."}</p></div><button className={refreshing ? "is-refreshing" : ""} onClick={onRefresh} disabled={refreshing} aria-label="Refresh stories">↻</button></header>}
     {page === "saved" && <header className="feed-heading"><div><span>YOUR LIBRARY</span><h1>Worth keeping.</h1><p>Stories you saved to return to.</p></div></header>}
-    {!currentStories.length ? <div className="consumer-empty"><span>☆</span><h2>Nothing here yet.</h2><p>Save a story that you want to revisit.</p><button onClick={() => onNavigate("feed")}>Go to your flow</button></div> : <div className="consumer-feed">{currentStories.map((story, index) => <ConsumerStory key={story.id} story={story} index={index} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => setStoryArc(story)} onShare={() => void onShare(story)} onOpenPro={() => onOpenPro(story)} />)}</div>}
-    {page !== "saved" && <button className="discover-more" onClick={() => onNavigate(page === "today" ? "feed" : "explore")}>{page === "today" ? "Keep exploring" : "Explore your topics"} <span>→</span></button>}
+    {!currentStories.length ? <div className="consumer-empty"><span>☆</span><h2>Nothing here yet.</h2><p>Save a story that you want to revisit.</p><button onClick={() => onNavigate("feed")}>Go to your flow</button></div> : <div className="consumer-feed">{currentStories.map((story, index) => <ConsumerStory key={story.id} story={story} index={index} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => setStoryArc(story)} onShare={() => void onShare(story)} />)}</div>}
+    {page !== "saved" && <button className="discover-more" onClick={() => onNavigate("explore")}>Explore your topics <span>→</span></button>}
     {storyArc && <StoryArc story={storyArc} onClose={() => setStoryArc(null)} onShare={onShare} />}
   </section>;
 }
 
-function ConsumerStory({ story, index, saved, onSave, onOpen, onShare, onOpenPro }: { story: Story; index: number; saved: boolean; onSave: () => void; onOpen: () => void; onShare: () => void; onOpenPro: () => void }) {
+function ConsumerStory({ story, index, saved, onSave, onOpen, onShare }: { story: Story; index: number; saved: boolean; onSave: () => void; onOpen: () => void; onShare: () => void }) {
   return <article className={`consumer-story ${index === 0 ? "featured" : ""}`}>
     <button className="story-media" onClick={onOpen} aria-label={`Understand ${story.title}`}><img src={story.image} alt="" loading={index > 2 ? "lazy" : "eager"} /><span>{story.tags[0] || "Now"}</span></button>
-    <div className="consumer-copy"><div className="consumer-meta"><span>{story.source}</span><i /> <span>{story.age}</span><button onClick={onSave} aria-label={saved ? "Remove saved story" : "Save story"}>{saved ? "★" : "☆"}</button></div><h2><button onClick={onOpen}>{story.title}</button></h2><p>{story.summary}</p><div className="why-matters"><span>WHY IT MATTERS</span><p>{shortStoryContext(story)}</p></div><footer><button onClick={onOpen}>StoryArc <span>+</span></button><a href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>Read source ↗</a><button onClick={onShare} aria-label={`Share ${story.title}`}>⤴</button>{story.tags.some((tag) => ["Markets", "Business", "Regulation"].includes(tag)) && <button className="pro-nudge" onClick={onOpenPro}>Pro</button>}</footer></div>
+    <div className="consumer-copy"><div className="consumer-meta"><span>{story.source}</span><i /> <span>{story.age}</span><button onClick={onSave} aria-label={saved ? "Remove saved story" : "Save story"}>{saved ? "★" : "☆"}</button></div><h2><button onClick={onOpen}>{story.title}</button></h2><p>{story.summary}</p><div className="why-matters"><span>WHY IT MATTERS</span><p>{shortStoryContext(story)}</p></div><footer><button onClick={onOpen}>StoryArc <span>+</span></button><a href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>Read source ↗</a><button onClick={onShare} aria-label={`Create and send a story image for ${story.title}`}>Send ↗</button></footer></div>
   </article>;
 }
 
@@ -745,8 +776,14 @@ function StoryArc({ story, onClose, onShare }: { story: Story; onClose: () => vo
   return <div className="story-arc-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="story-arc" role="dialog" aria-modal="true" aria-label="Story context"><button className="arc-close" onClick={onClose} aria-label="Close story context">×</button><span>{story.tags.slice(0, 2).join(" · ")}</span><h2>{story.title}</h2><p className="arc-summary">{story.summary}</p><section><span>STORYARC</span>{timeline.map((item, index) => <div key={item}><i>{String(index + 1).padStart(2, "0")}</i><div><strong>{item}</strong><p>{index === 0 ? `${story.source} reported this ${story.age}.` : index === 1 ? shortStoryContext(story) : "Follow the original reporting for the next confirmed update."}</p></div></div>)}</section><footer><a href={story.sourceUrl} target="_blank" rel="noreferrer">Open original ↗</a><button onClick={() => void onShare(story)}>Share</button></footer></aside></div>;
 }
 
+function PersonalDetails({ profile, onClose, onSave, onGoogleLogin }: { profile: PersonalProfile; onClose: () => void; onSave: (profile: PersonalProfile) => void; onGoogleLogin: () => void }) {
+  const [draft, setDraft] = useState(profile);
+  const uploadPhoto = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => setDraft((current) => ({ ...current, photo: String(reader.result || "") })); reader.readAsDataURL(file); };
+  return <div className="story-arc-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="personal-details" role="dialog" aria-modal="true" aria-label="Personal details"><button className="arc-close" onClick={onClose} aria-label="Close personal details">×</button><span>YOUR SHARING PROFILE</span><h2>Put your name on the story.</h2><p>Use your Google photo or upload one. It appears prominently on images you share.</p>{!profile.googleSub && <button className="google-login" onClick={onGoogleLogin}><b>G</b> Continue with Google</button>}<label className="profile-photo-upload">{draft.photo ? <img src={draft.photo} alt="Your profile" /> : <strong>{draft.name.slice(0, 1) || "+"}</strong>}<input type="file" accept="image/*" onChange={(event) => uploadPhoto(event.target.files?.[0])} /><span>Change photo</span></label><label>Full name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Your name" /></label><label>Title or role<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="e.g. Curious citizen" /></label><button className="profile-save" disabled={!draft.name.trim()} onClick={() => { onSave(draft); onClose(); }}>Save personal details</button></aside></div>;
+}
+
 function Brand() {
-  return <a className="brand editorial-brand" href="/" aria-label="IntelFlow home"><span className="brand-seal" aria-hidden="true"><b>I</b><i>F</i></span><span className="brand-lockup"><span className="wordmark">Intel<strong>Flow</strong></span><small>THE INTELLIGENCE BRIEF</small></span></a>;
+  return <a className="brand editorial-brand" href="/" aria-label="IntelFlow home"><img className="brand-mark" src="/brand/intelflow-mark-v1.png" alt="" /><span className="brand-lockup"><span className="wordmark">Intel<strong>Flow</strong></span><small>YOUR DAILY FLOW</small></span></a>;
 }
 
 function topicColor(tag: string) {
