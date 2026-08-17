@@ -755,7 +755,7 @@ export default function Home() {
         <div className="top-actions">
           <button className="theme-toggle" aria-label={darkMode ? "Use light mode" : "Use dark mode"} aria-pressed={darkMode} onClick={() => setDarkMode((value) => !value)}><span>{darkMode ? "☀" : "☾"}</span></button>
           <Link className="support-link" href="/contact">Contact</Link>
-          <button className="avatar-button" aria-label="Open account and site menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>{personalProfile.photo ? <img src={personalProfile.photo} alt="" referrerPolicy="no-referrer" /> : personalProfile.name?.trim().charAt(0).toUpperCase() || "IF"}</button>
+          {personalProfile.googleSub ? <button className="avatar-button" aria-label="Open account and site menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>{personalProfile.photo ? <img src={personalProfile.photo} alt="" referrerPolicy="no-referrer" /> : personalProfile.name?.trim().charAt(0).toUpperCase()}</button> : <button className="top-google-login" onClick={openGoogleLogin}><b>G</b><span className="google-label-full">Sign in with Google</span><span className="google-label-short">Sign in</span></button>}
         </div>
         {menuOpen && (
           <div className="profile-menu">
