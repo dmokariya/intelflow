@@ -8,6 +8,7 @@ type ReaderState = { url: string; title: string; source: string };
 export default function ReaderPage() {
   const [article, setArticle] = useState<ReaderState | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -19,20 +20,26 @@ export default function ReaderPage() {
     } catch {
       setArticle(null);
     }
+    try { setDarkMode(JSON.parse(localStorage.getItem("intelflow:dark-mode") || "false")); } catch { setDarkMode(false); }
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    localStorage.setItem("intelflow:dark-mode", JSON.stringify(darkMode));
+  }, [darkMode]);
 
   return (
     <main className="reader-shell">
       <header className="reader-header">
         <Link className="reader-back" href="/" aria-label="Back to IntelFlow">←</Link>
-        <Link className="reader-logo" href="/"><span>Intel</span><strong>Flow</strong></Link>
-        {article ? <a className="reader-external" href={article.url} target="_blank" rel="noreferrer">Open original ↗</a> : <span />}
+        <Link className="reader-logo" href="/"><img src="/brand/intelflow-mark.svg" alt="" /><span>Intel<strong>Flow</strong></span></Link>
+        <div className="reader-actions"><button className="theme-toggle" aria-label={darkMode ? "Use light mode" : "Use dark mode"} aria-pressed={darkMode} onClick={() => setDarkMode((value) => !value)}>{darkMode ? "☀" : "☾"}</button>{article ? <a className="reader-external" href={article.url} target="_blank" rel="noreferrer">Open original ↗</a> : <span />}</div>
       </header>
       {article ? (
         <>
           <section className="reader-context">
-            <span>{article.source}</span><h1>{article.title}</h1>
-            <p>Publisher page shown inside IntelFlow. Content and privacy practices belong to the original publisher.</p>
+            <span>READING FROM {article.source}</span><h1>{article.title}</h1>
+            <p>The original publisher’s page appears below. Reporting and privacy practices belong to that publisher.</p>
           </section>
           <div className="reader-frame-wrap">
             {!loaded && <div className="reader-loading"><i /><span>Opening original report…</span></div>}

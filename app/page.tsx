@@ -412,18 +412,35 @@ function imageFrom(url: string) {
 async function createShareImage(story: Story, profile: PersonalProfile) {
   const canvas = document.createElement("canvas"); canvas.width = 1080; canvas.height = 1350;
   const context = canvas.getContext("2d"); if (!context) throw new Error("Canvas unavailable");
-  const shades = ["#0b2d27", "#102e45", "#3a1d4e", "#45253c"]; const shade = shades[story.id % shades.length];
-  const gradient = context.createLinearGradient(0, 0, 1080, 1350); gradient.addColorStop(0, shade); gradient.addColorStop(1, "#060b0d"); context.fillStyle = gradient; context.fillRect(0, 0, 1080, 1350);
-  context.fillStyle = "#c8f229"; context.beginPath(); context.arc(930, 150, 170, 0, Math.PI * 2); context.fill(); context.globalAlpha = .12; context.fillStyle = "#f7efdf"; context.beginPath(); context.arc(110, 840, 320, 0, Math.PI * 2); context.fill(); context.globalAlpha = 1;
-  context.fillStyle = "#c8f229"; context.font = "800 28px Arial"; context.fillText((story.tags[0] || "NOW").toUpperCase(), 78, 120);
-  context.fillStyle = "#f7efdf"; context.font = "700 70px Georgia";
-  const words = story.title.split(/\s+/); let line = ""; let y = 245;
-  words.forEach((word) => { if (context.measureText(`${line} ${word}`).width > 850 && line) { context.fillText(line, 78, y); y += 88; line = word; } else line = line ? `${line} ${word}` : word; }); if (line) context.fillText(line, 78, y);
-  context.fillStyle = "rgba(247,239,223,.76)"; context.font = "600 27px Arial"; context.fillText(`SOURCE · ${story.source.toUpperCase()}`, 78, y + 74);
-  context.fillStyle = "rgba(247,239,223,.12)"; context.fillRect(58, 1050, 964, 2);
-  try { const photo = await imageFrom(profile.photo); context.save(); context.beginPath(); context.arc(154, 1174, 70, 0, Math.PI * 2); context.clip(); context.drawImage(photo, 84, 1104, 140, 140); context.restore(); } catch { context.fillStyle = "#c8f229"; context.beginPath(); context.arc(154, 1174, 70, 0, Math.PI * 2); context.fill(); context.fillStyle = "#071012"; context.font = "800 52px Arial"; context.fillText(profile.name.slice(0, 1).toUpperCase(), 137, 1192); }
-  context.fillStyle = "#f7efdf"; context.font = "800 34px Arial"; context.fillText(profile.name, 250, 1165); context.fillStyle = "rgba(247,239,223,.7)"; context.font = "500 25px Arial"; context.fillText(profile.title || "Sharing what matters", 250, 1206);
-  context.fillStyle = "#c8f229"; context.font = "800 26px Arial"; context.fillText("INTELFLOW", 78, 1280); context.fillStyle = "rgba(247,239,223,.62)"; context.font = "600 20px Arial"; context.fillText("YOUR DAILY FLOW", 78, 1315);
+  context.fillStyle = "#f4f6f8"; context.fillRect(0, 0, 1080, 1350);
+  context.fillStyle = "#ffffff"; context.fillRect(42, 42, 996, 1266);
+  context.fillStyle = "#111827"; context.beginPath(); context.roundRect(76, 76, 64, 64, 15); context.fill();
+  context.fillStyle = "#22c55e"; context.beginPath(); context.roundRect(91, 91, 13, 34, 6); context.fill();
+  context.fillStyle = "#c8f229"; context.beginPath(); context.moveTo(111, 91); context.lineTo(127, 91); context.lineTo(111, 124); context.closePath(); context.fill();
+  context.fillStyle = "#111827"; context.font = "800 34px Arial"; context.fillText("IntelFlow", 160, 118);
+  context.fillStyle = "#2563eb"; context.font = "800 18px Arial"; context.fillText((story.tags[0] || "TOP STORY").toUpperCase(), 78, 218);
+  const titleSize = story.title.length > 105 ? 55 : story.title.length > 70 ? 62 : 70;
+  context.fillStyle = "#111827"; context.font = `800 ${titleSize}px Arial`;
+  const titleBottom = wrapCanvasText(context, story.title, 78, 302, 924, titleSize * 1.13, 6);
+  context.fillStyle = "#596273"; context.font = "500 27px Arial";
+  const summaryBottom = wrapCanvasText(context, story.summary, 78, titleBottom + 30, 924, 39, 4);
+  const sourceY = Math.min(890, summaryBottom + 38);
+  context.fillStyle = "#eef4ff"; context.beginPath(); context.roundRect(78, sourceY, 924, 62, 12); context.fill();
+  context.fillStyle = "#2563eb"; context.font = "800 20px Arial"; context.fillText(`SOURCE · ${story.source.toUpperCase().slice(0, 66)}`, 102, sourceY + 39);
+  const identityY = 1004;
+  context.fillStyle = "#111827"; context.beginPath(); context.roundRect(78, identityY, 924, 240, 20); context.fill();
+  try {
+    const photo = await imageFrom(profile.photo);
+    context.save(); context.beginPath(); context.roundRect(98, identityY + 20, 200, 200, 16); context.clip();
+    const scale = Math.max(200 / photo.width, 200 / photo.height);
+    context.drawImage(photo, 98 + (200 - photo.width * scale) / 2, identityY + 20 + (200 - photo.height * scale) / 2, photo.width * scale, photo.height * scale); context.restore();
+  } catch {
+    context.fillStyle = "#2563eb"; context.beginPath(); context.roundRect(98, identityY + 20, 200, 200, 16); context.fill();
+    context.fillStyle = "#fff"; context.font = "800 82px Arial"; context.textAlign = "center"; context.fillText(profile.name.slice(0, 1).toUpperCase(), 198, identityY + 146); context.textAlign = "left";
+  }
+  context.fillStyle = "#fff"; context.font = "800 40px Arial"; wrapCanvasText(context, profile.name, 330, identityY + 84, 620, 48, 2);
+  context.fillStyle = "#aeb8c7"; context.font = "600 25px Arial"; wrapCanvasText(context, profile.title || "Sharing what matters", 330, identityY + 160, 620, 34, 2);
+  context.fillStyle = "#667085"; context.font = "700 18px Arial"; context.fillText("NEWS WORTH SHARING · INTELFLOW.IN", 78, 1282);
   return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Image creation failed")), "image/png"));
 }
 
@@ -442,6 +459,7 @@ export default function Home() {
   const [profile, setProfile] = useState<DistributorProfile>(defaultDistributorProfile);
   const [personalProfile, setPersonalProfile] = useState<PersonalProfile>(defaultPersonalProfile);
   const [personalOpen, setPersonalOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
   const [viewedStories, setViewedStories] = useState<string[]>([]);
   const [explainStory, setExplainStory] = useState<Story | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -478,6 +496,7 @@ export default function Home() {
     setProfile({ ...defaultDistributorProfile, ...storage.get("intelflow:distributor-profile", defaultDistributorProfile) });
     setPersonalProfile({ ...defaultPersonalProfile, ...storage.get("intelflow:personal-profile", defaultPersonalProfile) });
     setViewedStories(storage.get("intelflow:viewed-stories", []));
+    setDarkMode(storage.get("intelflow:dark-mode", false));
     const applyUrlState = () => {
       const parameters = new URLSearchParams(window.location.search);
       const requestedPage = parameters.get("view") as AppPage | null;
@@ -504,6 +523,11 @@ export default function Home() {
     loadFeed();
     return () => window.removeEventListener("popstate", applyUrlState);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    storage.set("intelflow:dark-mode", darkMode);
+  }, [darkMode]);
 
   useEffect(() => {
     const script = document.createElement("script"); script.src = "https://accounts.google.com/gsi/client"; script.async = true;
@@ -728,6 +752,7 @@ export default function Home() {
         <Brand />
         <span className="distributor-badge">YOUR DAILY SIGNAL</span>
         <div className="top-actions">
+          <button className="theme-toggle" aria-label={darkMode ? "Use light mode" : "Use dark mode"} aria-pressed={darkMode} onClick={() => setDarkMode((value) => !value)}><span>{darkMode ? "☀" : "☾"}</span></button>
           <Link className="support-link" href="/contact">Contact</Link>
           <button className="avatar-button" aria-label="Open account and site menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>{personalProfile.photo ? <img src={personalProfile.photo} alt="" referrerPolicy="no-referrer" /> : personalProfile.name?.trim().charAt(0).toUpperCase() || "IF"}</button>
         </div>
@@ -828,8 +853,8 @@ function MiniStory({ story, saved, onSave, onOpen }: { story: Story; saved: bool
 }
 
 function StoryArc({ story, onClose, onShare }: { story: Story; onClose: () => void; onShare: (story: Story) => Promise<void> }) {
-  const timeline = ["It surfaced", "Why people noticed", "What it could change"];
-  return <div className="story-arc-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="story-arc" role="dialog" aria-modal="true" aria-label="Story context"><button className="arc-close" onClick={onClose} aria-label="Close story context">×</button><span>{story.tags.slice(0, 2).join(" · ")}</span><h2>{story.title}</h2><p className="arc-summary">{story.summary}</p><section><span>STORYARC</span>{timeline.map((item, index) => <div key={item}><i>{String(index + 1).padStart(2, "0")}</i><div><strong>{item}</strong><p>{index === 0 ? `${story.source} reported this ${story.age}.` : index === 1 ? shortStoryContext(story) : "Follow the original reporting for the next confirmed update."}</p></div></div>)}</section><footer><a href={story.sourceUrl} target="_blank" rel="noreferrer">Open original ↗</a><button onClick={() => void onShare(story)}>Share</button></footer></aside></div>;
+  const readerUrl = `/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`;
+  return <div className="story-arc-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="story-arc" role="dialog" aria-modal="true" aria-label="Story context"><header><div><span>STORYARC · {story.tags.slice(0, 2).join(" · ")}</span><small>{story.source} · {story.age}</small></div><button className="arc-close" onClick={onClose} aria-label="Close story context">×</button></header><div className="arc-layout"><div className="arc-lead"><img src={story.image} alt="" /><h2>{story.title}</h2><p className="arc-summary">{story.summary}</p></div><section className="arc-insight"><div><span>THE SIGNAL</span><p>{shortStoryContext(story)}</p></div><div><span>WHAT IS CONFIRMED</span><p>{story.source} is the attributed publisher. The summary reflects the information currently available from that report.</p></div><div><span>WHAT TO WATCH</span><p>Look for a primary announcement, named response or independently confirmed follow-up before treating the story as settled.</p></div><div><span>YOUR NEXT READ</span><p>Open the source for the full reporting, evidence and context that cannot fit inside a short brief.</p></div></section></div><footer><Link href={readerUrl}>Read the full source ↗</Link><button onClick={() => void onShare(story)}>Send as image</button></footer></aside></div>;
 }
 
 function PersonalDetails({ profile, onClose, onSave, onGoogleLogin, onSignOut, onDelete }: { profile: PersonalProfile; onClose: () => void; onSave: (profile: PersonalProfile) => void; onGoogleLogin: () => void; onSignOut: () => void; onDelete: () => void }) {
