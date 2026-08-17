@@ -2,11 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
+
+type GoogleIdentity = {
+  accounts: {
+    id: {
+      initialize: (options: { client_id: string; callback: (response: { credential: string }) => void | Promise<void> }) => void;
+      prompt: () => void;
+    };
+  };
+};
 
 declare global {
   interface Window {
     dataLayer?: Array<Record<string, unknown>>;
-    google?: any;
+    google?: GoogleIdentity;
   }
 }
 
@@ -709,7 +719,7 @@ export default function Home() {
         <Brand />
         <span className="distributor-badge">YOUR DAILY SIGNAL</span>
         <div className="top-actions">
-          <a className="support-link" href="/contact">Contact</a>
+          <Link className="support-link" href="/contact">Contact</Link>
           <button className="avatar-button" aria-label="Open account and site menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>{profile.name?.trim().charAt(0).toUpperCase() || "IF"}</button>
         </div>
         {menuOpen && (
@@ -719,7 +729,7 @@ export default function Home() {
             <span>Personal details and your public sharing profile.</span>
             <button onClick={() => { setMenuOpen(false); setPersonalOpen(true); }}>Personal details</button>
             <div className="profile-menu-links">
-              <a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/disclosure">Disclosure</a><a href="/contact">Contact</a>
+              <Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/disclosure">Disclosure</Link><Link href="/contact">Contact</Link>
             </div>
           </div>
         )}
@@ -820,7 +830,7 @@ function PersonalDetails({ profile, onClose, onSave, onGoogleLogin, onSignOut, o
 }
 
 function Brand() {
-  return <a className="brand editorial-brand" href="/" aria-label="IntelFlow home"><img className="brand-mark" src="/brand/intelflow-mark-v1.png" alt="" /><span className="brand-lockup"><span className="wordmark">Intel<strong>Flow</strong></span><small>YOUR DAILY FLOW</small></span></a>;
+  return <Link className="brand editorial-brand" href="/" aria-label="IntelFlow home"><img className="brand-mark" src="/brand/intelflow-mark-v1.png" alt="" /><span className="brand-lockup"><span className="wordmark">Intel<strong>Flow</strong></span><small>YOUR DAILY FLOW</small></span></Link>;
 }
 
 function topicColor(tag: string) {
@@ -831,9 +841,9 @@ function StoryCompanyImpact({ story, manualTickers, watchedTickers }: { story: S
   const impacts = getCompanyImpacts(story, manualTickers);
   const financeRelevant = story.tags.some((tag) => ["Markets", "Business", "India", "Regulation", "Personal Finance", "Economy", "Energy", "US"].includes(tag));
   if (!impacts.length && !financeRelevant) return null;
-  if (!impacts.length) return <details className="story-impact-card empty-impact" aria-label={`Company impact for ${story.title}`}><summary><span>◆ COMPANY IMPACT</span><strong>No reliable listed-company match</strong><i>Details ＋</i></summary><div className="story-impact-detail"><p>IntelFlow will not force a weak connection. Attach a company only if you can explain the transmission channel and verify it from a primary source.</p><a href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`}>Attach a company in Research tools →</a></div></details>;
+  if (!impacts.length) return <details className="story-impact-card empty-impact" aria-label={`Company impact for ${story.title}`}><summary><span>◆ COMPANY IMPACT</span><strong>No reliable listed-company match</strong><i>Details ＋</i></summary><div className="story-impact-detail"><p>IntelFlow will not force a weak connection. Attach a company only if you can explain the transmission channel and verify it from a primary source.</p><Link href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`}>Attach a company in Research tools →</Link></div></details>;
   const watched = impacts.filter((impact) => watchedTickers.includes(impact.ticker)).length;
-  return <details className="story-impact-card" aria-label={`Company impact for ${story.title}`}><summary><span>◆ COMPANY IMPACT</span><strong>{impacts[0].ticker} · {impacts[0].direction}</strong><i>Details ＋</i></summary><div className="story-impact-detail"><small>{impacts[0].confidence} confidence · {impacts[0].directness}</small><p>{impacts[0].mechanism}</p><div><span>{impacts.map((impact) => `${watchedTickers.includes(impact.ticker) ? "★ " : ""}${impact.ticker}`).join(" · ")}</span><a href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`}>{watched ? `${watched} watched · ` : ""}Open research tools →</a></div></div></details>;
+  return <details className="story-impact-card" aria-label={`Company impact for ${story.title}`}><summary><span>◆ COMPANY IMPACT</span><strong>{impacts[0].ticker} · {impacts[0].direction}</strong><i>Details ＋</i></summary><div className="story-impact-detail"><small>{impacts[0].confidence} confidence · {impacts[0].directness}</small><p>{impacts[0].mechanism}</p><div><span>{impacts.map((impact) => `${watchedTickers.includes(impact.ticker) ? "★ " : ""}${impact.ticker}`).join(" · ")}</span><Link href={`/?view=pro&tab=desk&impact=${story.id}#company-impact`}>{watched ? `${watched} watched · ` : ""}Open research tools →</Link></div></div></details>;
 }
 
 function selectMorningFive(stories: Story[]) {
@@ -1128,7 +1138,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 
         <div className="mfd-workspace">
           <section className="mfd-implications">
-            <header><div><span className="pro-kicker">YOUR MORNING 5</span><h2>Today’s practical implications</h2><p>What happened, why it matters and the safest useful client response.</p></div><a href="/?view=feed">View all news →</a></header>
+            <header><div><span className="pro-kicker">YOUR MORNING 5</span><h2>Today’s practical implications</h2><p>What happened, why it matters and the safest useful client response.</p></div><Link href="/?view=feed">View all news →</Link></header>
             <div className="implication-head" aria-hidden="true"><span>Priority</span><span>Development and context</span><span>Client response</span></div>
             <div>{(morningFive.length ? morningFive : stories.slice(0, 5)).map((story, index) => {
               const impact = getCompanyImpacts(story, manualCompanyLinks[String(story.id)])[0];
@@ -1145,7 +1155,7 @@ function DistributorPro({ stories, trial, setTrial, profile, setProfile, initial
 
             <DailyClientDigest stories={morningFive.length ? morningFive : stories.slice(0, 5)} updates={regulatorUpdates} profile={profile} locked={trialStatus.locked} onOutput={recordTrialAction} />
 
-            <section className="mfd-watch"><header><span className="pro-kicker">WATCHLIST</span><strong>Needs a quick check</strong></header><a href="/?view=pro&tab=regulators"><i>✓</i><span><b>Compliance inbox</b><small>{regulatorUpdates.length} official updates</small></span><strong>→</strong></a><a href="#company-impact"><i>↗</i><span><b>Company Impact</b><small>{impactQueue.length} relevant connections</small></span><strong>↓</strong></a></section>
+            <section className="mfd-watch"><header><span className="pro-kicker">WATCHLIST</span><strong>Needs a quick check</strong></header><Link href="/?view=pro&tab=regulators"><i>✓</i><span><b>Compliance inbox</b><small>{regulatorUpdates.length} official updates</small></span><strong>→</strong></Link><a href="#company-impact"><i>↗</i><span><b>Company Impact</b><small>{impactQueue.length} relevant connections</small></span><strong>↓</strong></a></section>
 
             <details className="dashboard-checklist"><summary><div><span className="pro-kicker">TODAY’S CHECKLIST</span><strong>{completedDeskActions.filter((id) => dailyDeskActions.some((action) => action.id === id)).length}/{dailyDeskActions.length} complete</strong></div><i>Open ＋</i></summary><div>{dailyDeskActions.map((action) => <button type="button" key={action.id} className={`${completedDeskActions.includes(action.id) ? "done" : ""} ${action.newsTriggered ? "news-triggered" : ""}`} onClick={() => toggleDeskAction(action.id)}><i>{completedDeskActions.includes(action.id) ? "✓" : ""}</i><span><strong>{action.title}</strong><small>{action.reason}</small></span></button>)}</div></details>
           </aside>
@@ -1360,6 +1370,7 @@ async function publishHostedShare(story: Story, context: string, profile: Distri
 function ShareLinkDashboard({ links, onChange }: { links: OwnedShare[]; onChange: (next: OwnedShare[]) => void }) {
   const [confirmId, setConfirmId] = useState("");
   const [status, setStatus] = useState("");
+  const [now] = useState(() => Date.now());
   const linkIds = links.map((link) => link.id).join(",");
 
   async function refreshStats() {
@@ -1411,14 +1422,14 @@ function ShareLinkDashboard({ links, onChange }: { links: OwnedShare[]; onChange
     setStatus("Share link copied.");
   }
 
-  const activeLinks = links.filter((link) => !link.stats?.revokedAt && link.expiresAt > Date.now());
+  const activeLinks = links.filter((link) => !link.stats?.revokedAt && link.expiresAt > now);
   const totals = activeLinks.reduce((sum, link) => ({ views: sum.views + (link.stats?.views || 0), clicks: sum.clicks + (link.stats?.sourceClicks || 0), contacts: sum.contacts + (link.stats?.contactClicks || 0) }), { views: 0, clicks: 0, contacts: 0 });
   return <section className="share-link-dashboard">
     <div className="share-dashboard-head"><div><span className="pro-kicker">PUBLIC · EXPIRING · REVOCABLE</span><h3>Recent share links</h3><p>Only aggregate actions are counted. IntelFlow does not store visitor identities, messages or client details.</p></div><button type="button" onClick={() => void refreshStats()}>Refresh activity</button></div>
     <div className="share-metrics"><div><strong>{activeLinks.length}</strong><span>Active links</span></div><div><strong>{totals.views}</strong><span>Page views</span></div><div><strong>{totals.clicks}</strong><span>Source opens</span></div><div><strong>{totals.contacts}</strong><span>Discuss clicks</span></div></div>
     {!links.length ? <p className="share-empty">Create a branded source link from the written-note or social-image workspace. Its private owner key stays only in this browser.</p> : <div className="owned-share-list">{links.slice(0, 8).map((link) => {
       const revoked = Boolean(link.stats?.revokedAt);
-      const expired = link.expiresAt <= Date.now();
+      const expired = link.expiresAt <= now;
       return <article key={link.id} className={revoked || expired ? "inactive" : ""}><div><span>{revoked ? "REVOKED" : expired ? "EXPIRED" : `ACTIVE · ${new Date(link.expiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`}</span><strong>{link.title}</strong><small>{link.stats?.views || 0} views · {link.stats?.sourceClicks || 0} source opens · {link.stats?.contactClicks || 0} discuss clicks</small></div><div>{!revoked && !expired && <><a href={link.url} target="_blank" rel="noreferrer">Open</a><button type="button" onClick={() => void shareLink(link)}>Share</button><button type="button" className={confirmId === link.id ? "confirm" : "revoke"} onClick={() => void revokeLink(link)}>{confirmId === link.id ? "Confirm revoke" : "Revoke"}</button></>}</div></article>;
     })}</div>}
     {status && <p className="studio-status" role="status">{status}</p>}
