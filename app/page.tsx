@@ -33,7 +33,7 @@ function productEvent(event: string, details: { storyId?: string | number; topic
   if (typeof window === "undefined") return;
   const getId = (key: string) => { let value = sessionStorage.getItem(key); if (!value) { value = crypto.randomUUID(); sessionStorage.setItem(key, value); } return value; };
   let anonymousId = localStorage.getItem("intelflow:anonymous-id"); if (!anonymousId) { anonymousId = crypto.randomUUID(); localStorage.setItem("intelflow:anonymous-id", anonymousId); }
-  void fetch("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body: JSON.stringify({ event, anonymousId, sessionId: getId("intelflow:session-id"), storyId: details.storyId, topic: details.topic, properties: details.properties }) }).catch(() => undefined);
+  void fetch("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true, body: JSON.stringify({ event, anonymousId, sessionId: getId("intelflow:session-id"), storyId: details.storyId, topic: details.topic, properties: { platform: "web", ...(details.properties || {}) } }) }).catch(() => undefined);
 }
 
 type Story = {
@@ -537,6 +537,7 @@ export default function Home() {
       const result = await response.json() as { profile: PersonalProfile };
       setPersonalProfile((current) => { const next = { ...result.profile, title: current.title, photo: current.photo || result.profile.photo }; storage.set("intelflow:personal-profile", next); return next; });
       void loadPersistentSaves();
+      productEvent("signed_in", { properties: { provider: "google" } });
       setPersonalOpen(true); trackEvent("google_sign_in", { method: "google" });
     }});
     document.head.append(script); return () => script.remove();
@@ -822,21 +823,25 @@ function ConsumerHub({ page, stories, savedStories, bookmarks, interests, active
   onOpenStory: (story: Story, callback: () => void) => void;
 }) {
   const [storyArc, setStoryArc] = useState<Story | null>(null);
+  const [feedbackSent, setFeedbackSent] = useState(() => storage.get("intelflow:stop-feedback", false));
   const currentStories = page === "saved" ? savedStories : stories;
   const topicGroups = interests.map((topic) => ({ topic, stories: stories.filter((story) => story.tags.includes(topic)).slice(0, 3) })).filter((group) => group.stories.length);
+  const openStoryArc = (story: Story) => onOpenStory(story, () => { productEvent("storyarc_opened", { storyId: story.id, topic: story.tags[0] }); setStoryArc(story); });
+  const submitFeedback = (reason: string) => { productEvent("scroll_feedback", { properties: { reason } }); storage.set("intelflow:stop-feedback", true); setFeedbackSent(true); };
 
   if (page === "explore") return <section className="consumer-surface explore-surface">
     <header className="consumer-heading"><span>EXPLORE</span><h1>Follow your curiosity.</h1><p>Choose a lane when you want it. Your main feed stays uncluttered.</p></header>
     <div className="topic-pills" aria-label="Topics you follow">{interests.map((topic) => <button key={topic} className={activeTopic === topic ? "active" : ""} onClick={() => onChooseTopic(topic)}>{topic}</button>)}</div>
-    <div className="topic-hubs">{topicGroups.map(({ topic, stories: groupStories }) => <section key={topic} className="topic-hub"><div><span>{topic}</span><button onClick={() => onChooseTopic(topic)}>Open →</button></div>{groupStories.map((story) => <MiniStory key={story.id} story={story} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => onOpenStory(story, () => setStoryArc(story))} />)}</section>)}</div>
+    <div className="topic-hubs">{topicGroups.map(({ topic, stories: groupStories }) => <section key={topic} className="topic-hub"><div><span>{topic}</span><button onClick={() => onChooseTopic(topic)}>Open →</button></div>{groupStories.map((story) => <MiniStory key={story.id} story={story} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => openStoryArc(story)} />)}</section>)}</div>
     {storyArc && <StoryArc story={storyArc} onClose={() => setStoryArc(null)} onShare={onShare} />}
   </section>;
 
   return <section className="consumer-surface">
     {page === "feed" && <header className="feed-heading"><div><span>{activeTopic === "For you" ? "YOUR FLOW" : activeTopic.toUpperCase()}</span><h1>Keep scrolling.<br />Keep up.</h1><p>{lastUpdated ? `Updated ${lastUpdated}` : "Fresh stories, with the noise turned down."}</p></div><button className={refreshing ? "is-refreshing" : ""} onClick={onRefresh} disabled={refreshing} aria-label="Refresh stories">↻</button></header>}
     {page === "saved" && <header className="feed-heading"><div><span>YOUR LIBRARY</span><h1>Worth keeping.</h1><p>Stories you saved to return to.</p></div></header>}
-    {!currentStories.length ? <div className="consumer-empty"><span>☆</span><h2>Nothing here yet.</h2><p>Save a story that you want to revisit.</p><button onClick={() => onNavigate("feed")}>Go to your flow</button></div> : <div className="consumer-feed">{currentStories.map((story, index) => <ConsumerStory key={story.id} story={story} index={index} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => onOpenStory(story, () => setStoryArc(story))} onShare={() => void onShare(story)} />)}</div>}
+    {!currentStories.length ? <div className="consumer-empty"><span>☆</span><h2>Nothing here yet.</h2><p>Save a story that you want to revisit.</p><button onClick={() => onNavigate("feed")}>Go to your flow</button></div> : <div className="consumer-feed">{currentStories.map((story, index) => <ConsumerStory key={story.id} story={story} index={index} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => openStoryArc(story)} onShare={() => void onShare(story)} />)}</div>}
     {page !== "saved" && <button className="discover-more" onClick={() => onNavigate("explore")}>Explore your topics <span>→</span></button>}
+    {page === "feed" && !feedbackSent && <aside className="scroll-feedback"><div><span>ONE QUICK QUESTION</span><strong>What made you stop scrolling?</strong></div><div>{[["useful_story","Found something useful"],["caught_up","I’m caught up"],["repetitive","Too repetitive"],["not_relevant","Not relevant"]].map(([value,label]) => <button key={value} onClick={() => submitFeedback(value)}>{label}</button>)}</div></aside>}
     {storyArc && <StoryArc story={storyArc} onClose={() => setStoryArc(null)} onShare={onShare} />}
   </section>;
 }
