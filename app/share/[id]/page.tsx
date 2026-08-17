@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { getShareRecord, shareIsActive } from "../../../lib/share-store";
 import ShareEventLinks from "./share-event-links";
 
@@ -41,7 +42,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function PublicSharePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const record = /^[A-Za-z0-9_-]{12}$/.test(id) ? await getShareRecord(id) : null;
-  if (!shareIsActive(record)) return <main className="public-share-shell"><section className="public-share-unavailable"><a className="public-share-brand" href="/"><span>IF</span><strong>IntelFlow</strong></a><span>SHARE UNAVAILABLE</span><h1>This update has expired or was withdrawn.</h1><p>Return to IntelFlow for the latest attributed financial and regulatory briefing.</p><a href="/">Open IntelFlow →</a></section></main>;
+  if (!shareIsActive(record)) return <main className="public-share-shell"><section className="public-share-unavailable"><Link className="public-share-brand" href="/"><span>IF</span><strong>IntelFlow</strong></Link><span>SHARE UNAVAILABLE</span><h1>This update has expired or was withdrawn.</h1><p>Return to IntelFlow for the latest attributed financial and regulatory briefing.</p><Link href="/">Open IntelFlow →</Link></section></main>;
 
   const share = record!;
   const identity = [share.arn, share.euin].filter(Boolean).join(" · ");
@@ -50,7 +51,7 @@ export default async function PublicSharePage({ params }: { params: Promise<{ id
   return <main className="public-share-shell" style={style}>
     <article className="public-share-card">
       <header className="public-share-header">
-        <a className="public-share-brand" href="/"><span>IF</span><strong>IntelFlow</strong></a>
+        <Link className="public-share-brand" href="/"><span>IF</span><strong>IntelFlow</strong></Link>
         <div><small>SHARED BY</small><strong>{share.distributorName || "Financial product distributor"}</strong>{identity && <span>{identity}</span>}</div>
       </header>
       <div className="public-share-image"><img src={`/api/shares/${id}/image`} alt="" /></div>
@@ -62,7 +63,7 @@ export default async function PublicSharePage({ params }: { params: Promise<{ id
         <ShareEventLinks id={id} sourceUrl={share.sourceUrl} contactUrl={contactUrl} />
         <p className="public-share-source-note">IntelFlow does not reproduce the publisher’s article. The source button opens the original publication for full context.</p>
       </section>
-      <footer className="public-share-footer"><p><strong>Important:</strong> One headline alone does not require an immediate portfolio change. This update contains no buy or sell recommendation.</p><p>{share.disclaimer}</p><div><span>Shared via <a href="/">IntelFlow</a>, a product of Swarnim Capital.</span><time dateTime={new Date(share.createdAt).toISOString()}>{new Date(share.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</time></div></footer>
+      <footer className="public-share-footer"><p><strong>Important:</strong> One headline alone does not require an immediate portfolio change. This update contains no buy or sell recommendation.</p><p>{share.disclaimer}</p><div><span>Shared via <Link href="/">IntelFlow</Link>, a product of Swarnim Capital.</span><time dateTime={new Date(share.createdAt).toISOString()}>{new Date(share.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</time></div></footer>
     </article>
   </main>;
 }

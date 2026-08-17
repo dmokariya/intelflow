@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { currentUser, googleClientId, readSession, sessionCookie, verifyCredential } from "../../../../lib/user-auth";
+import { currentUser, sessionCookie, verifyCredential } from "../../../../lib/user-auth";
 
 export const dynamic = "force-dynamic";
 
