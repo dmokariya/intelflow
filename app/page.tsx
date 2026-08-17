@@ -21,6 +21,7 @@ declare global {
 }
 
 const googleClientId = "530840408871-o2dq3b2bfo4346n5at0i44f7oa526h44.apps.googleusercontent.com";
+const consumerResetVersion = 3;
 
 function trackEvent(name: string, parameters: Record<string, string | number | boolean> = {}) {
   if (typeof window === "undefined") return;
@@ -451,6 +452,14 @@ export default function Home() {
   const [manualCompanyLinks, setManualCompanyLinks] = useState<ManualCompanyLinks>({});
 
   useEffect(() => {
+    const appliedResetVersion = storage.get("intelflow:consumer-reset-version", 0);
+    if (appliedResetVersion < consumerResetVersion) {
+      Object.keys(localStorage)
+        .filter((key) => key.startsWith("intelflow:"))
+        .forEach((key) => localStorage.removeItem(key));
+      sessionStorage.removeItem("intelflow:session-id");
+      storage.set("intelflow:consumer-reset-version", consumerResetVersion);
+    }
     setOnboarded(storage.get("intelflow:onboarded", false));
     const freshInterests = ["India", "World", "Entertainment", "Technology", "Sports", "Health"];
     const interestVersion = storage.get("intelflow:interest-version", 0);
@@ -720,12 +729,12 @@ export default function Home() {
         <span className="distributor-badge">YOUR DAILY SIGNAL</span>
         <div className="top-actions">
           <Link className="support-link" href="/contact">Contact</Link>
-          <button className="avatar-button" aria-label="Open account and site menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>{profile.name?.trim().charAt(0).toUpperCase() || "IF"}</button>
+          <button className="avatar-button" aria-label="Open account and site menu" aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>{personalProfile.photo ? <img src={personalProfile.photo} alt="" referrerPolicy="no-referrer" /> : personalProfile.name?.trim().charAt(0).toUpperCase() || "IF"}</button>
         </div>
         {menuOpen && (
           <div className="profile-menu">
             <span className="profile-menu-label">YOUR INTELFLOW</span>
-            <strong>{profile.name || "Your IntelFlow"}</strong>
+            <strong>{personalProfile.name || "Your IntelFlow"}</strong>
             <span>Personal details and your public sharing profile.</span>
             <button onClick={() => { setMenuOpen(false); setPersonalOpen(true); }}>Personal details</button>
             <div className="profile-menu-links">
@@ -810,7 +819,7 @@ function ConsumerHub({ page, stories, savedStories, bookmarks, interests, active
 function ConsumerStory({ story, index, saved, onSave, onOpen, onShare }: { story: Story; index: number; saved: boolean; onSave: () => void; onOpen: () => void; onShare: () => void }) {
   return <article className={`consumer-story ${index === 0 ? "featured" : ""}`}>
     <button className="story-media" onClick={onOpen} aria-label={`Understand ${story.title}`}><img src={story.image} alt="" loading={index > 2 ? "lazy" : "eager"} /><span>{story.tags[0] || "Now"}</span></button>
-    <div className="consumer-copy"><div className="consumer-meta"><span>{story.source}</span><i /> <span>{story.age}</span><button onClick={onSave} aria-label={saved ? "Remove saved story" : "Save story"}>{saved ? "★" : "☆"}</button></div><h2><button onClick={onOpen}>{story.title}</button></h2><p>{story.summary}</p><div className="why-matters"><span>WHY IT MATTERS</span><p>{shortStoryContext(story)}</p></div><footer><button onClick={onOpen}>StoryArc <span>+</span></button><a onClick={() => productEvent("source_opened", { storyId: story.id, topic: story.tags[0] })} href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>Read source ↗</a><button onClick={onShare} aria-label={`Create and send a story image for ${story.title}`}>Send ↗</button></footer></div>
+    <div className="consumer-copy"><div className="consumer-meta"><span>{story.source}</span><i /> <span>{story.age}</span><button onClick={onSave} aria-label={saved ? "Remove saved story" : "Save story"}>{saved ? "★" : "☆"}</button></div><h2><Link onClick={() => productEvent("source_opened", { storyId: story.id, topic: story.tags[0], properties: { placement: "headline" } })} href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>{story.title}</Link></h2><p>{story.summary}</p><div className="why-matters"><span>WHY IT MATTERS</span><p>{shortStoryContext(story)}</p></div><footer><button onClick={onOpen}>StoryArc <span>+</span></button><a onClick={() => productEvent("source_opened", { storyId: story.id, topic: story.tags[0] })} href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>Read source ↗</a><button onClick={onShare} aria-label={`Create and send a story image for ${story.title}`}>Send ↗</button></footer></div>
   </article>;
 }
 
@@ -830,7 +839,7 @@ function PersonalDetails({ profile, onClose, onSave, onGoogleLogin, onSignOut, o
 }
 
 function Brand() {
-  return <Link className="brand editorial-brand" href="/" aria-label="IntelFlow home"><img className="brand-mark" src="/brand/intelflow-mark-v1.png" alt="" /><span className="brand-lockup"><span className="wordmark">Intel<strong>Flow</strong></span><small>YOUR DAILY FLOW</small></span></Link>;
+  return <Link className="brand editorial-brand" href="/" aria-label="IntelFlow home"><img className="brand-mark" src="/brand/intelflow-mark.svg" alt="" /><span className="brand-lockup"><span className="wordmark">Intel<strong>Flow</strong></span><small>NEWS THAT MOVES</small></span></Link>;
 }
 
 function topicColor(tag: string) {
