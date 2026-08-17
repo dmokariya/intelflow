@@ -3,7 +3,7 @@ import { currentUser } from "../../../lib/user-auth";
 
 export const dynamic = "force-dynamic";
 // Keep these names and the properties.platform field stable: the Android app uses the same contract.
-const allowed = new Set(["session_started","signed_in","story_viewed","story_saved","story_unsaved","storyarc_opened","source_opened","share_started","share_completed","share_downloaded","feed_refreshed","feed_mode_changed","story_feedback","topic_opened","scroll_feedback","profile_updated","signed_out","account_deleted"]);
+const allowed = new Set(["session_started","signed_in","story_viewed","story_saved","story_unsaved","storyarc_opened","source_opened","share_started","share_completed","share_downloaded","feed_refreshed","feed_mode_changed","story_feedback","interests_updated","topic_opened","scroll_feedback","profile_updated","signed_out","account_deleted"]);
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({})) as { event?: string; anonymousId?: string; sessionId?: string; storyId?: string; topic?: string; properties?: Record<string, unknown> };
   if (!body.event || !allowed.has(body.event)) return Response.json({ error: "Unsupported event." }, { status: 400 });

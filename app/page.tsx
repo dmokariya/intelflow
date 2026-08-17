@@ -639,6 +639,13 @@ export default function Home() {
     );
   }
 
+  function updateInterests(next: string[]) {
+    setSelected(next);
+    storage.set("intelflow:interests", next);
+    storage.set("intelflow:interest-version", 2);
+    productEvent("interests_updated", { properties: { interests: next, interest_count: next.length } });
+  }
+
   function finishOnboarding() {
     if (selected.length < 3) return;
     storage.set("intelflow:onboarded", true);
@@ -831,6 +838,7 @@ export default function Home() {
           feedMood={feedMood}
           onMoodChange={setFeedMood}
           onStoryPreference={recordStoryPreference}
+          onUpdateInterests={updateInterests}
         />
       )}
 
@@ -843,7 +851,7 @@ export default function Home() {
   );
 }
 
-function ConsumerHub({ page, stories, savedStories, bookmarks, interests, activeTopic, refreshing, lastUpdated, feedMood, onRefresh, onNavigate, onChooseTopic, onToggleBookmark, onShare, onOpenStory, onMoodChange, onStoryPreference }: {
+function ConsumerHub({ page, stories, savedStories, bookmarks, interests, activeTopic, refreshing, lastUpdated, feedMood, onRefresh, onNavigate, onChooseTopic, onToggleBookmark, onShare, onOpenStory, onMoodChange, onStoryPreference, onUpdateInterests }: {
   page: AppPage;
   stories: Story[];
   savedStories: Story[];
@@ -861,8 +869,10 @@ function ConsumerHub({ page, stories, savedStories, bookmarks, interests, active
   feedMood: FeedMood;
   onMoodChange: (mood: FeedMood) => void;
   onStoryPreference: (story: Story, preference: StoryPreference | "hide-source") => void;
+  onUpdateInterests: (interests: string[]) => void;
 }) {
   const [storyArc, setStoryArc] = useState<Story | null>(null);
+  const [interestsOpen, setInterestsOpen] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(() => storage.get("intelflow:stop-feedback", false));
   const currentStories = page === "saved" ? savedStories : stories;
   const topicGroups = interests.map((topic) => ({ topic, stories: stories.filter((story) => story.tags.includes(topic)).slice(0, 3) })).filter((group) => group.stories.length);
@@ -879,14 +889,21 @@ function ConsumerHub({ page, stories, savedStories, bookmarks, interests, active
   return <section className="consumer-surface">
     {page === "feed" && <header className="feed-heading"><div><span>{activeTopic === "For you" ? "YOUR FLOW" : activeTopic.toUpperCase()}</span><h1>Keep scrolling.<br />Keep up.</h1><p>{lastUpdated ? `Updated ${lastUpdated}` : "Fresh stories, with the noise turned down."}</p></div><button className={refreshing ? "is-refreshing" : ""} onClick={onRefresh} disabled={refreshing} aria-label="Refresh stories">↻</button></header>}
     {page === "saved" && <header className="feed-heading"><div><span>YOUR LIBRARY</span><h1>Worth keeping.</h1><p>Stories you saved to return to.</p></div></header>}
-    {page === "feed" && <div className="feed-moods" aria-label="Choose feed mode">{([["for-you","For You"],["light","Light & Trending"],["surprise","Surprise Me"],["daily-seven","Daily 7"]] as Array<[FeedMood,string]>).map(([value,label]) => <button key={value} className={feedMood === value ? "active" : ""} onClick={() => { onMoodChange(value); productEvent("feed_mode_changed", { properties: { mode: value } }); }}>{label}</button>)}</div>}
+    {page === "feed" && <div className="feed-mode-row"><div className="feed-moods" aria-label="Choose feed mode">{([["for-you","For You"],["light","Light & Trending"],["surprise","Surprise Me"],["daily-seven","Daily 7"]] as Array<[FeedMood,string]>).map(([value,label]) => <button key={value} className={feedMood === value ? "active" : ""} onClick={() => { onMoodChange(value); productEvent("feed_mode_changed", { properties: { mode: value } }); }}>{label}</button>)}</div><button className="edit-interests" onClick={() => setInterestsOpen(true)}>＋ Edit interests</button></div>}
     {page === "feed" && feedMood === "daily-seven" && <div className="daily-seven-progress"><strong>Your Daily 7</strong><span>Seven worthwhile stories. A clear finish.</span></div>}
     {!currentStories.length ? <div className="consumer-empty"><span>☆</span><h2>Nothing here yet.</h2><p>Save a story that you want to revisit.</p><button onClick={() => onNavigate("feed")}>Go to your flow</button></div> : <div className="consumer-feed">{currentStories.map((story, index) => <ConsumerStory key={story.id} story={story} index={index} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => openStoryArc(story)} onShare={() => void onShare(story)} onPreference={(preference) => onStoryPreference(story, preference)} />)}</div>}
     {page === "feed" && feedMood === "daily-seven" && currentStories.length > 0 && <div className="daily-seven-finish"><span>✓</span><strong>You’re caught up.</strong><p>Come back later for a fresh seven.</p></div>}
     {page !== "saved" && <button className="discover-more" onClick={() => onNavigate("explore")}>Explore your topics <span>→</span></button>}
     {page === "feed" && !feedbackSent && <aside className="scroll-feedback"><div><span>ONE QUICK QUESTION</span><strong>What made you stop scrolling?</strong></div><div>{[["useful_story","Found something useful"],["caught_up","I’m caught up"],["repetitive","Too repetitive"],["not_relevant","Not relevant"]].map(([value,label]) => <button key={value} onClick={() => submitFeedback(value)}>{label}</button>)}</div></aside>}
     {storyArc && <StoryArc story={storyArc} onClose={() => setStoryArc(null)} onShare={onShare} />}
+    {interestsOpen && <InterestEditor selected={interests} onClose={() => setInterestsOpen(false)} onSave={(next) => { onUpdateInterests(next); setInterestsOpen(false); }} />}
   </section>;
+}
+
+function InterestEditor({ selected, onClose, onSave }: { selected: string[]; onClose: () => void; onSave: (interests: string[]) => void }) {
+  const [draft, setDraft] = useState(selected);
+  const toggle = (tag: string) => setDraft((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
+  return <div className="story-arc-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="interest-editor" role="dialog" aria-modal="true" aria-label="Edit your interests"><header><div><span>PERSONALISE YOUR FEED</span><h2>What are you curious about?</h2><p>Choose at least three. You can change these whenever you like.</p></div><button className="arc-close" onClick={onClose} aria-label="Close interest editor">×</button></header><div className="interest-editor-grid">{interests.map(([tag,label,icon]) => <button key={tag} className={draft.includes(tag) ? "selected" : ""} onClick={() => toggle(tag)} aria-pressed={draft.includes(tag)}><span>{icon}</span><strong>{label}</strong><i>{draft.includes(tag) ? "✓" : "+"}</i></button>)}</div><footer><span>{draft.length} selected</span><button disabled={draft.length < 3} onClick={() => onSave(draft)}>Save interests</button></footer></aside></div>;
 }
 
 function ConsumerStory({ story, index, saved, onSave, onOpen, onShare, onPreference }: { story: Story; index: number; saved: boolean; onSave: () => void; onOpen: () => void; onShare: () => void; onPreference: (preference: StoryPreference | "hide-source") => void }) {
