@@ -223,7 +223,8 @@ async function collect(source: FeedSource) {
   }
 }
 
-type RankedStory = RawStory & { tags: string[]; score: number; category: FeedCategory; coverage: number; duplicateKey: string; duplicateWords: Set<string> };
+type RelatedStory = { title: string; source: string; sourceUrl: string; published: string };
+type RankedStory = RawStory & { tags: string[]; score: number; category: FeedCategory; coverage: number; related: RelatedStory[]; duplicateKey: string; duplicateWords: Set<string> };
 
 function clusterAndRank(stories: RawStory[], now: number) {
   const ranked = stories.filter((story) => {
@@ -237,6 +238,7 @@ function clusterAndRank(stories: RawStory[], now: number) {
       category: primaryCategory(story, tags),
       score: importanceScore(story, tags, now),
       coverage: 1,
+      related: [{ title: story.title, source: story.source.name, sourceUrl: story.link, published: story.published }],
       duplicateKey: story.title.toLowerCase().replace(/[^a-z0-9]/g, ""),
       duplicateWords: duplicateTokens(story.title),
     };
@@ -251,6 +253,7 @@ function clusterAndRank(stories: RawStory[], now: number) {
     if (existing) {
       existing.coverage += 1;
       existing.score += 4;
+      existing.related.push({ title: story.title, source: story.source.name, sourceUrl: story.link, published: story.published });
       if (!existing.image && story.image) existing.image = story.image;
       return;
     }
@@ -310,6 +313,10 @@ export async function GET() {
       imageFallback: fallbacks[index % fallbacks.length],
       accent: "#6747e8",
       coverage: story.coverage,
+      related: story.related.slice(0, 5).map((item) => {
+        const relatedHours = Math.max(0, Math.round((now - Date.parse(item.published)) / 3_600_000));
+        return { title: item.title, source: item.source, sourceUrl: item.sourceUrl, age: Number.isFinite(relatedHours) ? relatedHours < 1 ? "Just now" : relatedHours < 24 ? `${relatedHours} hr ago` : `${Math.round(relatedHours / 24)}d ago` : "Recent" };
+      }),
       category: story.category,
       importance: Math.round(story.score),
     };

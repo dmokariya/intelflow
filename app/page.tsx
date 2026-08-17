@@ -48,7 +48,15 @@ type Story = {
   image: string;
   accent: string;
   coverage: number;
+  category?: string;
+  importance?: number;
+  related?: Array<{ title: string; source: string; sourceUrl: string; age: string }>;
 };
+
+type FeedMood = "for-you" | "light" | "surprise" | "daily-seven";
+type StoryPreference = "more" | "less" | "hidden";
+type FeedPreferences = { stories: Record<string, StoryPreference>; sources: Record<string, "hidden">; tags: Record<string, number> };
+const emptyFeedPreferences: FeedPreferences = { stories: {}, sources: {}, tags: {} };
 
 type AppPage = "feed" | "explore" | "saved" | "pro";
 type ProTab = "desk" | "studio" | "regulators" | "profile";
@@ -461,6 +469,9 @@ export default function Home() {
   const [personalOpen, setPersonalOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [viewedStories, setViewedStories] = useState<string[]>([]);
+  const [feedMood, setFeedMood] = useState<FeedMood>("for-you");
+  const [feedPreferences, setFeedPreferences] = useState<FeedPreferences>(emptyFeedPreferences);
+  const [feedSessionSeed, setFeedSessionSeed] = useState(1);
   const [explainStory, setExplainStory] = useState<Story | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -496,6 +507,7 @@ export default function Home() {
     setProfile({ ...defaultDistributorProfile, ...storage.get("intelflow:distributor-profile", defaultDistributorProfile) });
     setPersonalProfile({ ...defaultPersonalProfile, ...storage.get("intelflow:personal-profile", defaultPersonalProfile) });
     setViewedStories(storage.get("intelflow:viewed-stories", []));
+    setFeedPreferences(storage.get("intelflow:feed-preferences", emptyFeedPreferences));
     setDarkMode(storage.get("intelflow:dark-mode", false));
     const applyUrlState = () => {
       const parameters = new URLSearchParams(window.location.search);
@@ -578,8 +590,8 @@ export default function Home() {
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Feed unavailable")))
       .then((data: { stories?: Story[]; generatedAt?: string; activeSources?: number; sources?: number }) => {
         if (data.stories?.length) {
-          const shuffled = [...data.stories].sort(() => Math.random() - .5);
-          setFeedStories(force ? shuffled : data.stories);
+          setFeedStories(data.stories);
+          if (force) setFeedSessionSeed((value) => value + 1);
         }
         if (data.generatedAt) setLastUpdated(new Date(data.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
         if (typeof data.activeSources === "number") setActiveSources(data.activeSources);
@@ -590,14 +602,36 @@ export default function Home() {
   }
 
   const rankedStories = useMemo(() => {
-    const base = activeTag === "For you" ? feedStories : feedStories.filter((story) => story.tags.includes(activeTag));
+    const visible = feedStories.filter((story) => feedPreferences.stories[String(story.id)] !== "hidden" && feedPreferences.sources[story.source] !== "hidden");
+    const base = activeTag === "For you" ? visible : visible.filter((story) => story.tags.includes(activeTag));
     const unseen = base.filter((story) => !viewedStories.includes(String(story.id)));
     const pool = unseen.length >= 5 ? unseen : base;
-    return [...pool].sort((a, b) => {
-      const score = (story: Story) => story.tags.filter((tag) => selected.includes(tag)).length;
-      return score(b) - score(a);
+    const stableDiscovery = (story: Story) => Math.abs((story.id * 9301 + feedSessionSeed * 49297) % 233280) / 233280;
+    const score = (story: Story) => {
+      const learned = story.tags.reduce((sum, tag) => sum + (feedPreferences.tags[tag] || 0), 0);
+      const explicit = feedPreferences.stories[String(story.id)] === "more" ? 25 : feedPreferences.stories[String(story.id)] === "less" ? -35 : 0;
+      if (feedMood === "light") return (story.tags.some((tag) => ["Entertainment", "Culture", "Sports", "Cricket", "Science", "Technology"].includes(tag)) ? 25 : -5) + learned + stableDiscovery(story) * 8;
+      if (feedMood === "surprise") return stableDiscovery(story) * 70 + (story.coverage > 1 ? 5 : 0);
+      return story.tags.filter((tag) => selected.includes(tag)).length * 12 + learned + explicit + (story.importance || 0) * .08 + stableDiscovery(story) * 5;
+    };
+    const ordered = [...pool].sort((a, b) => score(b) - score(a));
+    return feedMood === "daily-seven" ? ordered.slice(0, 7) : ordered;
+  }, [activeTag, selected, feedStories, viewedStories, feedMood, feedPreferences, feedSessionSeed]);
+
+  function recordStoryPreference(story: Story, preference: StoryPreference | "hide-source") {
+    setFeedPreferences((current) => {
+      const next: FeedPreferences = { stories: { ...current.stories }, sources: { ...current.sources }, tags: { ...current.tags } };
+      if (preference === "hide-source") next.sources[story.source] = "hidden";
+      else {
+        next.stories[String(story.id)] = preference;
+        const change = preference === "more" ? 3 : preference === "less" ? -3 : -1;
+        story.tags.forEach((tag) => { next.tags[tag] = Math.max(-12, Math.min(12, (next.tags[tag] || 0) + change)); });
+      }
+      storage.set("intelflow:feed-preferences", next);
+      return next;
     });
-  }, [activeTag, selected, feedStories, viewedStories]);
+    productEvent("story_feedback", { storyId: story.id, topic: story.tags[0], properties: { preference, source: story.source } });
+  }
 
   function toggleInterest(tag: string) {
     setSelected((current) =>
@@ -794,6 +828,9 @@ export default function Home() {
           onToggleBookmark={toggleBookmark}
           onShare={shareStory}
           onOpenStory={openStory}
+          feedMood={feedMood}
+          onMoodChange={setFeedMood}
+          onStoryPreference={recordStoryPreference}
         />
       )}
 
@@ -806,7 +843,7 @@ export default function Home() {
   );
 }
 
-function ConsumerHub({ page, stories, savedStories, bookmarks, interests, activeTopic, refreshing, lastUpdated, onRefresh, onNavigate, onChooseTopic, onToggleBookmark, onShare, onOpenStory }: {
+function ConsumerHub({ page, stories, savedStories, bookmarks, interests, activeTopic, refreshing, lastUpdated, feedMood, onRefresh, onNavigate, onChooseTopic, onToggleBookmark, onShare, onOpenStory, onMoodChange, onStoryPreference }: {
   page: AppPage;
   stories: Story[];
   savedStories: Story[];
@@ -821,6 +858,9 @@ function ConsumerHub({ page, stories, savedStories, bookmarks, interests, active
   onToggleBookmark: (id: number) => void;
   onShare: (story: Story) => Promise<void>;
   onOpenStory: (story: Story, callback: () => void) => void;
+  feedMood: FeedMood;
+  onMoodChange: (mood: FeedMood) => void;
+  onStoryPreference: (story: Story, preference: StoryPreference | "hide-source") => void;
 }) {
   const [storyArc, setStoryArc] = useState<Story | null>(null);
   const [feedbackSent, setFeedbackSent] = useState(() => storage.get("intelflow:stop-feedback", false));
@@ -839,17 +879,21 @@ function ConsumerHub({ page, stories, savedStories, bookmarks, interests, active
   return <section className="consumer-surface">
     {page === "feed" && <header className="feed-heading"><div><span>{activeTopic === "For you" ? "YOUR FLOW" : activeTopic.toUpperCase()}</span><h1>Keep scrolling.<br />Keep up.</h1><p>{lastUpdated ? `Updated ${lastUpdated}` : "Fresh stories, with the noise turned down."}</p></div><button className={refreshing ? "is-refreshing" : ""} onClick={onRefresh} disabled={refreshing} aria-label="Refresh stories">↻</button></header>}
     {page === "saved" && <header className="feed-heading"><div><span>YOUR LIBRARY</span><h1>Worth keeping.</h1><p>Stories you saved to return to.</p></div></header>}
-    {!currentStories.length ? <div className="consumer-empty"><span>☆</span><h2>Nothing here yet.</h2><p>Save a story that you want to revisit.</p><button onClick={() => onNavigate("feed")}>Go to your flow</button></div> : <div className="consumer-feed">{currentStories.map((story, index) => <ConsumerStory key={story.id} story={story} index={index} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => openStoryArc(story)} onShare={() => void onShare(story)} />)}</div>}
+    {page === "feed" && <div className="feed-moods" aria-label="Choose feed mode">{([["for-you","For You"],["light","Light & Trending"],["surprise","Surprise Me"],["daily-seven","Daily 7"]] as Array<[FeedMood,string]>).map(([value,label]) => <button key={value} className={feedMood === value ? "active" : ""} onClick={() => { onMoodChange(value); productEvent("feed_mode_changed", { properties: { mode: value } }); }}>{label}</button>)}</div>}
+    {page === "feed" && feedMood === "daily-seven" && <div className="daily-seven-progress"><strong>Your Daily 7</strong><span>Seven worthwhile stories. A clear finish.</span></div>}
+    {!currentStories.length ? <div className="consumer-empty"><span>☆</span><h2>Nothing here yet.</h2><p>Save a story that you want to revisit.</p><button onClick={() => onNavigate("feed")}>Go to your flow</button></div> : <div className="consumer-feed">{currentStories.map((story, index) => <ConsumerStory key={story.id} story={story} index={index} saved={bookmarks.includes(story.id)} onSave={() => onToggleBookmark(story.id)} onOpen={() => openStoryArc(story)} onShare={() => void onShare(story)} onPreference={(preference) => onStoryPreference(story, preference)} />)}</div>}
+    {page === "feed" && feedMood === "daily-seven" && currentStories.length > 0 && <div className="daily-seven-finish"><span>✓</span><strong>You’re caught up.</strong><p>Come back later for a fresh seven.</p></div>}
     {page !== "saved" && <button className="discover-more" onClick={() => onNavigate("explore")}>Explore your topics <span>→</span></button>}
     {page === "feed" && !feedbackSent && <aside className="scroll-feedback"><div><span>ONE QUICK QUESTION</span><strong>What made you stop scrolling?</strong></div><div>{[["useful_story","Found something useful"],["caught_up","I’m caught up"],["repetitive","Too repetitive"],["not_relevant","Not relevant"]].map(([value,label]) => <button key={value} onClick={() => submitFeedback(value)}>{label}</button>)}</div></aside>}
     {storyArc && <StoryArc story={storyArc} onClose={() => setStoryArc(null)} onShare={onShare} />}
   </section>;
 }
 
-function ConsumerStory({ story, index, saved, onSave, onOpen, onShare }: { story: Story; index: number; saved: boolean; onSave: () => void; onOpen: () => void; onShare: () => void }) {
+function ConsumerStory({ story, index, saved, onSave, onOpen, onShare, onPreference }: { story: Story; index: number; saved: boolean; onSave: () => void; onOpen: () => void; onShare: () => void; onPreference: (preference: StoryPreference | "hide-source") => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return <article className={`consumer-story ${index === 0 ? "featured" : ""}`}>
     <button className="story-media" onClick={onOpen} aria-label={`Understand ${story.title}`}><img src={story.image} alt="" loading={index > 2 ? "lazy" : "eager"} /><span>{story.tags[0] || "Now"}</span></button>
-    <div className="consumer-copy"><div className="consumer-meta"><span>{story.source}</span><i /> <span>{story.age}</span><button onClick={onSave} aria-label={saved ? "Remove saved story" : "Save story"}>{saved ? "★" : "☆"}</button></div><h2><Link onClick={() => productEvent("source_opened", { storyId: story.id, topic: story.tags[0], properties: { placement: "headline" } })} href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>{story.title}</Link></h2><p>{story.summary}</p><div className="why-matters"><span>WHY IT MATTERS</span><p>{shortStoryContext(story)}</p></div><footer><button onClick={onOpen}>StoryArc <span>+</span></button><a onClick={() => productEvent("source_opened", { storyId: story.id, topic: story.tags[0] })} href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>Read source ↗</a><button onClick={onShare} aria-label={`Create and send a story image for ${story.title}`}>Send ↗</button></footer></div>
+    <div className="consumer-copy"><div className="consumer-meta"><span>{story.source}</span><i /><span>{story.age}</span>{story.coverage > 1 && <span>{story.coverage} sources</span>}<div className="story-controls"><button onClick={onSave} aria-label={saved ? "Remove saved story" : "Save story"}>{saved ? "★" : "☆"}</button><button onClick={() => setMenuOpen((value) => !value)} aria-label="Tune this story" aria-expanded={menuOpen}>•••</button>{menuOpen && <div className="story-preference-menu">{[["more","More like this"],["less","Less like this"],["hidden","Hide story"],["hide-source",`Hide ${story.source}`]].map(([value,label]) => <button key={value} onClick={() => { onPreference(value as StoryPreference | "hide-source"); setMenuOpen(false); }}>{label}</button>)}</div>}</div></div><h2><Link onClick={() => productEvent("source_opened", { storyId: story.id, topic: story.tags[0], properties: { placement: "headline" } })} href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>{story.title}</Link></h2><p>{story.summary}</p><div className="why-matters"><span>WHY IT MATTERS</span><p>{shortStoryContext(story)}</p></div><footer><button onClick={onOpen}>Catch me up <span>+</span></button><a onClick={() => productEvent("source_opened", { storyId: story.id, topic: story.tags[0] })} href={`/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`}>Read source ↗</a><button onClick={onShare} aria-label={`Create and send a story image for ${story.title}`}>Send ↗</button></footer></div>
   </article>;
 }
 
@@ -859,7 +903,7 @@ function MiniStory({ story, saved, onSave, onOpen }: { story: Story; saved: bool
 
 function StoryArc({ story, onClose, onShare }: { story: Story; onClose: () => void; onShare: (story: Story) => Promise<void> }) {
   const readerUrl = `/reader?url=${encodeURIComponent(story.sourceUrl)}&title=${encodeURIComponent(story.title)}&source=${encodeURIComponent(story.source)}`;
-  return <div className="story-arc-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="story-arc" role="dialog" aria-modal="true" aria-label="Story context"><header><div><span>STORYARC · {story.tags.slice(0, 2).join(" · ")}</span><small>{story.source} · {story.age}</small></div><button className="arc-close" onClick={onClose} aria-label="Close story context">×</button></header><div className="arc-layout"><div className="arc-lead"><img src={story.image} alt="" /><h2>{story.title}</h2><p className="arc-summary">{story.summary}</p></div><section className="arc-insight"><div><span>THE SIGNAL</span><p>{shortStoryContext(story)}</p></div><div><span>WHAT IS CONFIRMED</span><p>{story.source} is the attributed publisher. The summary reflects the information currently available from that report.</p></div><div><span>WHAT TO WATCH</span><p>Look for a primary announcement, named response or independently confirmed follow-up before treating the story as settled.</p></div><div><span>YOUR NEXT READ</span><p>Open the source for the full reporting, evidence and context that cannot fit inside a short brief.</p></div></section></div><footer><Link href={readerUrl}>Read the full source ↗</Link><button onClick={() => void onShare(story)}>Send as image</button></footer></aside></div>;
+  return <div className="story-arc-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className="story-arc" role="dialog" aria-modal="true" aria-label="Catch me up"><header><div><span>CATCH ME UP · {story.tags.slice(0, 2).join(" · ")}</span><small>{story.coverage > 1 ? `${story.coverage} reports grouped` : story.source} · {story.age}</small></div><button className="arc-close" onClick={onClose} aria-label="Close story context">×</button></header><div className="arc-layout"><div className="arc-lead"><img src={story.image} alt="" /><h2>{story.title}</h2><p className="arc-summary">{story.summary}</p></div><section className="arc-insight"><div><span>IN PLAIN ENGLISH</span><p>{shortStoryContext(story)}</p></div><div><span>WHAT CHANGED</span><p>This report arrived {story.age.toLowerCase()}. {story.coverage > 1 ? `${story.coverage} related reports are grouped here, reducing repeated versions in your feed.` : "This is the first report currently grouped around this development."}</p></div><div><span>COVERAGE</span><p>{story.related?.length ? story.related.map((item) => `${item.source}: ${item.title}`).join(" · ") : `${story.source} is the attributed publisher for the information currently available.`}</p></div><div><span>WHAT REMAINS OPEN</span><p>Details may change as responses and primary documents emerge. Use the original coverage before treating the development as settled.</p></div></section></div><footer><Link href={readerUrl}>Read the full source ↗</Link><button onClick={() => void onShare(story)}>Send as image</button></footer></aside></div>;
 }
 
 function PersonalDetails({ profile, onClose, onSave, onGoogleLogin, onSignOut, onDelete }: { profile: PersonalProfile; onClose: () => void; onSave: (profile: PersonalProfile) => void; onGoogleLogin: () => void; onSignOut: () => void; onDelete: () => void }) {
