@@ -1,22 +1,26 @@
-# IntelFlow — An attributed daily briefing on Cloudflare, not a feed reader
+# IntelFlow — A daily briefing that credits its sources instead of rewriting them
 
-> A mobile-first briefing that turns thirty public RSS feeds into a clustered, tagged daily story feed with shareable, attributable cards.
+> Thirty public feeds clustered into one daily briefing where every story keeps its publisher, its date and a working link.
 
 **Status:** Maintained — live at [intelflow.in](https://intelflow.in); consumer direction released through 2026-08-17.
 
+## The problem
+
+News aggregation is cheap to build and expensive to trust. The standard product wins attention by rewriting other people's reporting into a house voice, which hides where a claim came from and sends the reader's click nowhere near the publisher who paid for the reporting.
+
+For a business, that is the wrong trade. An unattributed summary becomes a liability the moment someone quotes it, and a feed that shows a regulator's circular at the same weight as a market rumour teaches the reader nothing about which is which. The reader needs the source, the tier and the extraction method; the publisher needs the click.
+
+The first version answered a different question: whether mutual fund distributors would pay for client-ready content. Three weeks of distributor tooling ended in a rebuild loop and then a pivot to consumer reading.
+
 ## What it is
 
-IntelFlow reads thirty public RSS and Atom sources — regulators, business press, world news, science and sport — clusters near-duplicate stories, assigns interest tags, and writes a short extractive brief for each one before linking out to the publisher. Summaries are the publisher's own description, cut at 68 words; there is no model call and no rewrite of someone else's reporting.
+IntelFlow reads thirty public RSS and Atom sources — regulators, business press, world news, science and sport — clusters near-duplicate stories, tags them by interest, and writes a short extractive brief for each. The brief is the publisher's own description cut at 68 words. Nothing is rewritten, there is no model call, and every card links out.
 
-Readers browse a personalised feed as a guest, then optionally sign in with Google to save stories and keep interests across devices. Saving, sharing and topic selection all write to a Cloudflare D1 database; analytics are written to the same database and read back through a private admin dashboard with retention and share-conversion metrics.
+Readers browse as a guest, then optionally sign in with Google to keep saves and interests across devices. Saves, shares and topic choices write to a Cloudflare D1 database; the same database feeds a private admin dashboard with retention and share-conversion numbers.
 
-It began as a tool for mutual fund distributors and was redesigned around consumer reading and sharing. The distributor surfaces still exist in the codebase — the share record still carries an ARN, EUIN and disclaimer — but they are hidden from navigation, which is recorded in `PRODUCT_NOTES.md` rather than left to be discovered.
+The distributor surfaces remain in the codebase — share records still carry ARN, EUIN and disclaimer fields — but they are out of the navigation, recorded in `PRODUCT_NOTES.md` rather than left to be discovered.
 
-## Why I built it
-
-I wanted to know whether a reading habit could be built on distribution instead of novelty: a small number of well-tagged stories, each attributable, with no infinite scroll and no engagement bait. News products also fail in interesting ways — duplicates, dead feeds, publisher redirects, cards that misquote a source — so it was a good place to practise bounded network code.
-
-The first version assumed the buyer was a distributor who needed client-ready content, with a content studio, client notes and branded share links. By late July that assumption was visibly wrong: I rebuilt the same dashboard four times in one day and still could not make the workflow feel like something a distributor would open on a Monday. The pivot to consumer-first came three weeks later and is what the live product does now.
+Thirty feeds resolve to one page, and a dead publisher costs one card, not the briefing.
 
 ## How it works
 
@@ -40,16 +44,15 @@ browser
 ```
 
 - `app/api/feed/route.ts` — source table with tiers and per-source item caps, keyword tag rules, impact scoring, near-duplicate clustering, and a category-balancing pass so the top of the feed is not five market stories.
-- `app/api/article-context/route.ts` + `lib/trusted-publishers.ts` — the only place the product fetches a news publisher page; regulator documents use a tighter, separate allow-list of official domains.
+- `app/api/article-context/route.ts` + `lib/trusted-publishers.ts` — the only place the product fetches a news publisher page. Regulator documents use a tighter, separate allow-list of official domains.
 - `lib/share-store.ts` + `db/schema.ts` — share records, counters, revocation and expiry; owner tokens are stored as SHA-256 hashes.
-- `lib/user-auth.ts` — Google ID token verification and session lookup against D1.
 - `app/admin/page.tsx` + `app/api/admin/metrics/route.ts` — DAU/WAU/MAU, day-1 and day-7 retention, share conversion, topic affinity and per-user activity.
 - `app/robots.ts`, `app/sitemap.ts`, `app/feed.xml/route.ts`, `public/llms.txt`, `public/.well-known/security.txt` — discovery surfaces; `/admin`, `/api/` and `/reader` are excluded from crawling.
 
 ## Engineering log
 
 **2026-07-20 — From local build to a production domain**
-- Created the project, configured the Cloudflare hosting bindings, attached the apex and `www` domains, and added a Worker-level 308 to force HTTPS and the apex host.
+- Created the project, configured the Cloudflare bindings, attached the apex and `www` domains, and added a Worker-level 308 to force HTTPS and the apex host.
 - Replaced a webfont dependency with a deployment-safe font stack after production font loading failed.
 - Added analytics with a matching privacy disclosure, a dark theme, social preview metadata and a product credit.
 
@@ -65,26 +68,35 @@ browser
 
 **2026-07-23 — Four dashboard rebuilds in one day**
 - Rebuilt the distributor dashboard around the MFD workflow, restructured it three more times, then reverted to the previously approved version.
-- That sequence is the clearest evidence in the repo that the distributor premise was not working; the design was not the problem.
+- That sequence is the clearest evidence in the repo that the premise was not working; the design was not the problem.
 
 **2026-08-12 → 2026-08-17 — Consumer pivot: accounts, sharing and measurement**
 - Rebuilt discovery around a consumer daily briefing, added Google sign-in, consumer accounts and product analytics in D1.
-- Overhauled the consumer news interface, unified reading and sharing, added a personalised feed with an interest editor, and expanded audience analytics across platforms.
-- Added the admin dashboard with retention, share conversion and per-user activity, hardened indexing (robots, sitemap, canonical), and repaired navigation and the Cloudflare test validation.
+- Overhauled the news interface, unified reading and sharing, added a personalised feed with an interest editor, and expanded audience analytics.
+- Added the admin dashboard with retention, share conversion and per-user activity, hardened indexing, and repaired navigation and the Cloudflare test validation.
 
 ## Hard problems and how I solved them
 
-- **Summarising other people's articles without becoming an open proxy.** The context endpoint accepts only HTTPS URLs on a 24-domain allow-list of publishers and regulators, rejects credentials and non-443 ports, follows redirects manually for at most three hops with the same check on each hop, reads at most 1.5 MB with a 4.5-second timeout, and reports which extraction method worked (`article`, `metadata`, `paragraphs` or `unavailable`). Anything else returns an empty context, not a scrape. Result: briefs can be enriched without the server being usable to fetch arbitrary URLs.
-- **A share card is a claim about a source, so it cannot be client-authored.** The create endpoint re-checks the source URL against the publisher allow-list, caps every text field, accepts only a base64 PNG under 900 KB inside a 1.5 MB body, and rejects cross-site requests by `Origin`. The image goes to KV with an expiry matching the link; the D1 insert carries the SHA-256 of a random owner token rather than the token. If the database write fails, the KV object is deleted. Links expire in 7, 30 or 90 days and can be revoked. Result: a shared card either points at an approved publisher or does not exist.
-- **Sign-in without running an auth server.** The client receives a Google ID token; the server verifies it against the token endpoint and checks the audience, subject, verified email and expiry before touching the database, then issues an `HttpOnly; Secure; SameSite=Lax` cookie whose `Max-Age` is clamped to the remaining token lifetime (under an hour). Admin access is a separate server-side email allow-list. Account deletion removes saves, blanks the user row and anonymises events instead of deleting them, so metric history stays valid without keeping an identity. Result: no password storage, no long-lived session, and a delete that means something.
-- **Thirty feeds on every request.** The feed is fetched live on a cache-miss rather than scheduled. Each fetch has a 5-second abort, reads at most 4 MB and returns a per-source health record (`live`, `empty`, `timeout`, `unavailable`) instead of failing the page. Stories older than seven days or dated more than a day ahead are dropped, duplicates are clustered by normalised title and token overlap inside a 72-hour window, the cluster count becomes a coverage badge, and a fixed category sequence fills the opening screen. Result: one dead publisher degrades one card, and the response reports how many sources were actually live.
+- **Reading other people's articles without becoming an open proxy.** The context endpoint accepts only HTTPS URLs on a 24-domain allow-list of publishers and regulators, rejects credentials and non-443 ports, follows redirects manually for at most three hops with the same check on each hop, reads at most 1.5 MB with a 4.5-second timeout, and reports which extraction method worked (`article`, `metadata`, `paragraphs` or `unavailable`). Anything else returns an empty context, not a scrape. Result: briefs can be enriched without the server being usable to fetch arbitrary URLs.
+- **A share card is a claim about a source, so it cannot be client-authored.** The create endpoint re-checks the source URL against the allow-list, caps every text field, accepts only a base64 PNG under 900 KB inside a 1.5 MB body, and rejects cross-site requests by `Origin`. The image goes to KV with an expiry matching the link; the D1 insert carries the SHA-256 of a random owner token rather than the token. If the database write fails, the KV object is deleted. Links expire in 7, 30 or 90 days and can be revoked. Result: a shared card either points at an approved publisher or does not exist.
+- **Sign-in without running an auth server.** The client receives a Google ID token; the server verifies it against the token endpoint and checks the audience, subject, verified email and expiry before touching the database, then issues an `HttpOnly; Secure; SameSite=Lax` cookie clamped to the remaining token lifetime. Admin access is a separate server-side email allow-list. Account deletion removes saves, blanks the user row and anonymises events instead of deleting them, so metric history stays valid without keeping an identity. Result: no password storage, no long-lived session, and a delete that means something.
+- **Thirty feeds on every request.** The feed is fetched live on a cache-miss. Each fetch has a 5-second abort, reads at most 4 MB and returns a per-source health record (`live`, `empty`, `timeout`, `unavailable`) instead of failing the page. Stories older than seven days or dated more than a day ahead are dropped, duplicates are clustered by normalised title and token overlap inside a 72-hour window, the cluster count becomes a coverage badge, and a fixed category sequence fills the opening screen. Result: one dead publisher degrades one card, and the response reports how many sources were actually live.
 
-## What I would do next
+## What it cost and what it returned
 
-- Move ingestion off the request path: a scheduled Worker writes normalised stories into D1 (or KV) and `/api/feed` serves the last good snapshot. This is already listed as a gap in the project's own notes.
-- Reintroduce the distributor workspace deliberately, or delete it. Half-hidden code is a maintenance cost, and the ARN/EUIN fields on share records only make sense if that audience returns.
-- Extend the tests beyond the rendered-HTML and feed checks: cover share expiry and revocation, the article-context allow-list, and the Google token rejection paths.
-- Move the OAuth client ID out of source and into Worker environment configuration, as the admin allow-list already is, and re-check publisher feed and image terms before any advertising or SDK is enabled.
+- **Time:** 57 commits between 2026-07-20 and 2026-08-17 — four weeks, of which three went to the distributor workspace that the pivot then abandoned.
+- **Money:** the Worker, D1 and KV bindings are configured in this repo, but billing is not. Actual hosting spend is unknown from the code.
+- **Revenue:** none. The trial gate states ₹399 a month and says in the same box that no payment is collected there; Pro access is an email request. No customer, subscription or payout exists in the repo, and what the product could earn is not projected here.
+- **Return:** one dead commercial hypothesis closed in three weeks, a working public reference for the rest of this portfolio, and a measurement layer that can answer day-1 and day-7 retention and share conversion from its own database.
+
+Four rebuilds of one dashboard is a fast way to find out who the customer is not.
+
+## What I would do differently
+
+- I built three weeks of distributor tooling before asking a distributor to open it. The rebuild sequence on 2026-07-23 was evidence arriving late, not a design problem to be solved with another layout.
+- Attribution-first was the only durable idea in the first version and it was treated as a detail of the workspace. It should have been the pitch, and the workspace should have been the feature.
+- The distributor code is still in a public repository, half-hidden. Either the audience returns or the ARN/EUIN fields, client notes and content studio should be deleted; carrying them is a maintenance cost and a confusing read.
+- Ingestion still runs on the request path, so the product's freshness depends on a user's page load, and the OAuth client ID sits in source instead of Worker configuration. Both are shortcuts the first deploy took and the second deploy inherited.
 
 ## Stack
 
